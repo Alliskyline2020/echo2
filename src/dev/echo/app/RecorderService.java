@@ -143,18 +143,56 @@ public final class RecorderService extends Service implements Vad.Sink {
         captureThread.start();
     }
 
+    // ── 监听节能档位 ──
+    private static final long QUIET_SKIP_VAD_MS = 2 * 60_000;     // 2 分钟静默 → 跳 VAD，只查 RMS
+    private static final long QUIET_SKIP_ALL_MS = 10 * 60_000;    // 10 分钟极静 → 连 RMS 都跳，只等声音恢复
+    private static final double STANDBY_RMS_THRESHOLD = 500.0;    // RMS 超过此值 → 有声音，立即唤醒
+    private long lastSpeechAtMs = System.currentTimeMillis();
+
+    private static boolean batchRmsExceeds(short[] buf, int len, double threshold) {
+        if (len <= 0) return false;
+        double sum = 0;
+        for (int i = 0; i < len; i++) {
+            double v = buf[i] / 32768.0;
+            sum += v * v;
+        }
+        return Math.sqrt(sum / len) > threshold / 32768.0;
+    }
+
     private void captureLoop() {
         audioRecord.startRecording();
-        // 攒帧：一次读 320ms（16 帧）再逐帧喂 VAD。检测延迟不变（帧长仍是 20ms），
-        // 但 CPU 唤醒频率降为 1/16，待机功耗显著下降——这是常驻层最大的功耗项。
         final int BATCH_FRAMES = 16;
         short[] batch = new short[Vad.FRAME_SAMPLES * BATCH_FRAMES];
         short[] frame = new short[Vad.FRAME_SAMPLES];
         while (running) {
             int read = audioRecord.read(batch, 0, batch.length);
             if (read <= 0) continue;
-            int frames = read / Vad.FRAME_SAMPLES;
             long now = System.currentTimeMillis();
+            long quietMs = now - lastSpeechAtMs;
+
+            if (quietMs > QUIET_SKIP_ALL_MS) {
+                // 极静模式：只查 RMS 是否超过阈值，VAD 和帧处理全跳过。
+                // 麦克风硬件仍开着（关掉就无法检测声音恢复），但 CPU 几乎零开销。
+                if (batchRmsExceeds(batch, read, STANDBY_RMS_THRESHOLD)) {
+                    Log.i(TAG, "极静→检测到声音，恢复全量处理");
+                    vad.reset();
+                    lastSpeechAtMs = now;  // 唤醒：下一轮进全量 VAD
+                }
+                continue;
+            }
+
+            if (quietMs > QUIET_SKIP_VAD_MS) {
+                // 半待机：只查 RMS，不做 ZCR / VAD 状态机
+                if (batchRmsExceeds(batch, read, STANDBY_RMS_THRESHOLD)) {
+                    Log.i(TAG, "安静→检测到声音，恢复全量处理");
+                    vad.reset();
+                    lastSpeechAtMs = now;
+                }
+                continue;
+            }
+
+            // 全量处理：攒帧 + VAD
+            int frames = read / Vad.FRAME_SAMPLES;
             for (int f = 0; f < frames && running; f++) {
                 System.arraycopy(batch, f * Vad.FRAME_SAMPLES, frame, 0, Vad.FRAME_SAMPLES);
                 try {
@@ -163,6 +201,10 @@ public final class RecorderService extends Service implements Vad.Sink {
                     Log.w(TAG, "vad failed", error);
                 }
                 lastSeenAudioAtMs = now;
+            }
+            // VAD 检测到人声段时更新 lastSpeechAtMs
+            if (vad.isSpeechActive()) {
+                lastSpeechAtMs = now;
             }
         }
         try {

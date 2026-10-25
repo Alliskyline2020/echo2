@@ -84,7 +84,9 @@ public final class Pipeline {
 
                 try {
                     File wav = new File(segment.path);
-                    String text = engine.transcribe(context, wav, progress);
+                    String text = SenseVoiceAsr.modelAvailable(context)
+                            ? SenseVoiceAsr.transcribeWav(context, wav)
+                            : engine.transcribe(context, wav, progress);
                     // LLM 转写纠错层：只修错字/去重复/规范标点，不改意思。
                     // 只对主人段生效（other/unknown 只存档，不值得花推理）。
                     if ("owner".equals(segment.speaker) && text != null && text.trim().length() > 4) {

@@ -108,6 +108,7 @@ public final class CallLink {
             return;
         }
         File copy = new File(context.getFilesDir(), "RecorderDb.copy");
+        if (copy.exists()) copy.delete();
         if (!RootCmd.copyToAppData(DB_SRC, copy.getAbsolutePath())) return;
         try {
             SQLiteDatabase db = SQLiteDatabase.openDatabase(

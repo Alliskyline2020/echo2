@@ -14,8 +14,9 @@ public final class Vad {
     private static final float MAX_ZCR = 0.6f;
 
     private static final int PREROLL_FRAMES = 10;
-    private static final int MIN_SPEECH_FRAMES = 12;
-    private static final int END_SILENCE_FRAMES = 25;
+    private static final int MIN_SPEECH_FRAMES = 50;   // 1 秒有效语音才开段
+    private static final int END_SILENCE_FRAMES = 40;   // 800ms 静默关闭
+    private static final int MIN_SEGMENT_FRAMES = 100; // 段最短 2 秒才输出
     private static final int MAX_SEGMENT_FRAMES = SAMPLE_RATE / FRAME_SAMPLES * 30;
 
     private float noiseFloorDb = MIN_SPEECH_DB;
@@ -82,12 +83,22 @@ public final class Vad {
         }
     }
 
+    /** 当前是否在语音段内（给 RecorderService 做节能档位判断） */
+    public boolean isSpeechActive() {
+        return inSpeech;
+    }
+
     public void finish(Sink sink, long nowMs) {
         if (inSpeech && speechFrames >= MIN_SPEECH_FRAMES) flush(sink, nowMs);
         else reset();
     }
 
     private void flush(Sink sink, long frameAtMs) {
+        // 段太短 → 丢弃（噪声/咳嗽/门响不值得转写）
+        if (segmentLength < FRAME_SAMPLES * MIN_SEGMENT_FRAMES) {
+            segmentLength = 0; speechFrames = 0; silenceFrames = 0; inSpeech = false; prerollFill = 0;
+            return;
+        }
         if (speechFrames >= MIN_SPEECH_FRAMES && segmentLength > 0) {
             short[] out = new short[segmentLength];
             System.arraycopy(segment, 0, out, 0, segmentLength);
