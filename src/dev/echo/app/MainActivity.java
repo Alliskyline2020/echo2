@@ -1104,7 +1104,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             row.setBackground(active
                     ? Ui.pill(this, Ui.RADIUS_SM, PRIMARY_SOFT)
                     : Ui.pill(this, Ui.RADIUS_SM, Color.TRANSPARENT));
-            row.addView(Ui.text(this, names[i] + (active ? "  ✓" : ""),
+            row.addView(Ui.text(this, (active ? "● " : "○ ") + names[i],
                     active ? PRIMARY : TEXT_HI, Ui.Size.SUB, true));
             TextView noteText = Ui.text(this, notes[i], TEXT_LOW, Ui.Size.CAP, false);
             row.addView(noteText);

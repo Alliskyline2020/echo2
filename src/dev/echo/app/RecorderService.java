@@ -65,6 +65,7 @@ public final class RecorderService extends Service implements Vad.Sink {
         store = Store.get(this);
         engine = GemmaEngine.get();
         ReminderAlarm.scheduleMaintenance(this);
+        cleanOldRecordings();
         // 通话链路：通话中让出麦克风（StepOS 自己录），挂断后吸收它的转写
         CallLink.register(this, new CallLink.Callbacks() {
             @Override public void onCallStart() {
@@ -246,6 +247,21 @@ public final class RecorderService extends Service implements Vad.Sink {
 
     private long lastVoiceAtMs;
     private long lastSeenAudioAtMs;
+
+    
+    /** 清理 7 天前的已完成录音文件 */
+    private void cleanOldRecordings() {
+        try {
+            File dir = new File(getFilesDir(), "segments");
+            if (!dir.isDirectory()) return;
+            long cutoff = System.currentTimeMillis() - 7 * 86400_000L;
+            int n = 0;
+            for (File f : dir.listFiles()) {
+                if (f.isFile() && f.lastModified() < cutoff) { f.delete(); n++; }
+            }
+            if (n > 0) Log.i(TAG, "清理 " + n + " 个过期录音");
+        } catch (Throwable e) { Log.w(TAG, "录音清理失败", e); }
+    }
 
     public void onSegment(short[] samples, int length, long startedAtMs) {
         File dir = new File(getFilesDir(), "segments");
