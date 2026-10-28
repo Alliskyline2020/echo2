@@ -409,7 +409,17 @@ public final class RecorderService extends Service implements Vad.Sink {
         alive = false;
         running = false;
         recording = false;
-        // engine 是进程级单例，服务销毁不关闭（Activity 还在用；进程退出时自然回收）
+        vad.reset();
+        // 等采集线程退出（最多 1s），防止泄漏
+        try {
+            if (captureThread != null) captureThread.join(1000);
+        } catch (InterruptedException ignored) { }
+        captureThread = null;
+        try {
+            if (audioRecord != null) { audioRecord.stop(); audioRecord.release(); }
+        } catch (Throwable ignored) { }
+        audioRecord = null;
+        // engine 是进程级单例，服务销毁不关闭
         super.onDestroy();
     }
 }
