@@ -191,6 +191,16 @@ public final class Pipeline {
                 // 黑名单：语音助手的提示语/系统播报不是用户的待办
                 if (task.contains("逐字转写") || task.contains("这段音频")
                         || task.contains("转写这段") || task.contains("识别结果")) continue;
+                // 分类纠错：既没时间也没动作动词的不是待办，跳过
+                if (timeText == null || timeText.trim().isEmpty()) {
+                    boolean hasAction = false;
+                    for (String verb : new String[]{"打", "发", "交", "买", "去", "做", "写", "回",
+                            "叫", "问", "约", "取", "寄", "订", "审", "看", "汇报", "整理", "准备",
+                            "完成", "提交", "联系", "确认", "安排", "提醒"}) {
+                        if (task.contains(verb)) { hasAction = true; break; }
+                    }
+                    if (!hasAction) continue;
+                }
                 Model.Todo todo = new Model.Todo();
                 todo.id = UUID.randomUUID().toString();
                 todo.task = task;

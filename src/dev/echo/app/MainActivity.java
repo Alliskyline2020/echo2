@@ -94,6 +94,9 @@ public class MainActivity extends Activity implements RecorderService.Listener {
     private Button[] tabButtons;
     private volatile boolean enrolling = false;
     private boolean materialExpanded = false;
+    private boolean todosExpanded = false;
+    private boolean memoriesExpanded = false;
+    private boolean recordsExpanded = false;
     private android.animation.ObjectAnimator pulseAnim;
     private boolean lastRenderedRecording = false;
 
@@ -867,7 +870,15 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             openCard.addView(Ui.text(this, "没有进行中的待办。录一段话，需要做的事会被自动提出来。",
                     TEXT_LOW, Ui.Size.SUB, false));
         } else {
-            for (Model.Todo todo : open) todosBodySee(todo, openCard);
+            int shown = todosExpanded ? open.size() : Math.min(5, open.size());
+            for (int i = 0; i < shown; i++) todosBodySee(open.get(i), openCard);
+            if (open.size() > 5) {
+                TextView more = Ui.text(this,
+                        todosExpanded ? "收起" : "展开全部 " + open.size() + " 项  ›", PRIMARY, Ui.Size.SUB, false);
+                more.setPadding(dp(2), dp(8), 0, 0);
+                more.setOnClickListener(v -> { todosExpanded = !todosExpanded; render(); });
+                openCard.addView(more);
+            }
         }
         todosBody.addView(section("进行中 · " + open.size(), openCard));
 

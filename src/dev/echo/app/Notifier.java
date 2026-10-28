@@ -38,7 +38,10 @@ public final class Notifier {
                 : new Notification.Builder(context);
         builder.setContentTitle(title).setContentText(text)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentIntent(pending).setAutoCancel(true);
+                .setContentIntent(pending).setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setPriority(Notification.PRIORITY_HIGH)
+                .setDefaults(Notification.DEFAULT_VIBRATE | Notification.DEFAULT_SOUND);
         return builder;
     }
 
