@@ -295,11 +295,12 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setBackgroundColor(SURFACE);
-        String[] names = {"记录", "记忆", "待办", "设置"};
+        String[] names = {"◉ 记录", "◆ 记忆", "✓ 待办", "⚙ 设置"};
         tabButtons = new Button[names.length];
         for (int i = 0; i < names.length; i++) {
             final int index = i;
             Button button = new Button(this);
+            button.setAllCaps(false);
             button.setText(names[i]);
             button.setAllCaps(false);
             button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
@@ -341,7 +342,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         scroll.setBackgroundColor(BG);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(18), dp(14), dp(18), dp(24));
+        body.setPadding(dp(Ui.PAGE_H), dp(12), dp(Ui.PAGE_H), dp(24));
         scroll.addView(body, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         container.addView(scroll, new FrameLayout.LayoutParams(
@@ -353,7 +354,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
     private LinearLayout makeColumnPage(FrameLayout container, int index) {
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(18), dp(14), dp(18), dp(24));
+        body.setPadding(dp(Ui.PAGE_H), dp(12), dp(Ui.PAGE_H), dp(24));
         body.setBackgroundColor(BG);
         container.addView(body, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -546,49 +547,49 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(12), dp(10), dp(12), dp(10));
 
-        LinearLayout head = new LinearLayout(this);
-        head.setGravity(Gravity.CENTER_VERTICAL);
-        head.addView(Ui.text(this, clockFormat.format(new Date(segment.startedAt)), TEXT_LOW, Ui.Size.CAP, true));
-        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        chipParams.setMargins(dp(8), 0, 0, 0);
-        TextView chip = Ui.chip(this, (segment.durationMs / 1000) + "″", SURFACE_MUTED, TEXT_MID);
-        chip.setLayoutParams(chipParams);
-        head.addView(chip);
-        String state = "transcribing".equals(segment.state) ? "整理中…"
-                : "failed".equals(segment.state) ? "失败（会自动重试）" : "done".equals(segment.state) ? "" : "待整理";
-        if (!state.isEmpty()) {
-            TextView stateView = Ui.text(this, state, "failed".equals(segment.state) ? DANGER : TEXT_LOW,
-                    Ui.Size.CAP, false);
+        // 单行头部：时间 + 转写（done 段省略状态标签，减少视觉噪音）
+        String timeStr = clockFormat.format(new Date(segment.startedAt));
+        String text = segment.transcript;
+        if (text != null && !text.isEmpty()) {
+            // 转写 + 时间在同一行（时间小字灰底，转写正文紧随）
+            LinearLayout line = new LinearLayout(this);
+            line.setGravity(Gravity.CENTER_VERTICAL);
+            line.addView(Ui.text(this, timeStr, TEXT_LOW, Ui.Size.CAP, true));
+            TextView body = Ui.text(this, " " + text, TEXT_HI, Ui.Size.SUB, false);
+            body.setPadding(dp(8), 0, 0, 0);
+            line.addView(body, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            row.addView(line);
+        } else {
+            // 没转写：显示时间和状态
+            LinearLayout head = new LinearLayout(this);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+            head.addView(Ui.text(this, timeStr, TEXT_LOW, Ui.Size.CAP, true));
+            String state = "transcribing".equals(segment.state) ? " 整理中…"
+                    : "failed".equals(segment.state) ? " 失败（自动重试）" : " 待整理";
+            TextView stateView = Ui.text(this, state,
+                    "failed".equals(segment.state) ? DANGER : TEXT_LOW, Ui.Size.CAP, false);
             stateView.setPadding(dp(8), 0, 0, 0);
             head.addView(stateView);
-        }
-        row.addView(head);
-
-        if (segment.transcript != null && !segment.transcript.isEmpty()) {
-            TextView body = Ui.text(this, segment.transcript, TEXT_HI, Ui.Size.SUB, false);
-            body.setPadding(0, dp(4), 0, 0);
-            row.addView(body);
-        } else if (segment.error != null) {
-            row.addView(Ui.text(this, segment.error, DANGER, Ui.Size.CAP, false));
+            row.addView(head);
         }
 
+        // done 段才有播放按钮
         if ("done".equals(segment.state)) {
             LinearLayout playRow = new LinearLayout(this);
             playRow.setGravity(Gravity.CENTER_VERTICAL);
             playRow.setPadding(0, dp(6), 0, 0);
             boolean isPlaying = playingSegmentId != null && playingSegmentId.equals(segment.id);
-            Button play = new Button(this);
-            play.setText(isPlaying ? "■ 停止" : "▶ 播放");
-            play.setAllCaps(false);
-            play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            TextView play = new TextView(this);
+            play.setText(isPlaying ? "■" : "▶");
+            play.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             play.setTextColor(PRIMARY);
-            play.setBackground(Ui.pill(this, dp(7), PRIMARY_SOFT));
-            play.setStateListAnimator(null);
-            play.setMinHeight(0);
-            play.setPadding(dp(10), dp(4), dp(10), dp(4));
+            play.setBackground(Ui.dot(this, PRIMARY_SOFT, 32));
+            play.setGravity(Gravity.CENTER);
             play.setOnClickListener(v -> togglePlay(segment));
-            playRow.addView(play);
+            playRow.addView(play, new LinearLayout.LayoutParams(dp(32), dp(32)));
+            TextView playLabel = Ui.text(this, isPlaying ? "停止" : "回放", PRIMARY, Ui.Size.CAP, false);
+            playLabel.setPadding(dp(6), 0, 0, 0);
+            playRow.addView(playLabel);
             row.addView(playRow);
         }
         return row;
@@ -1343,8 +1344,9 @@ public class MainActivity extends Activity implements RecorderService.Listener {
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(12), dp(14), dp(12));
-        card.setBackground(Ui.card(this, Ui.RADIUS_MD, SURFACE, 0));
+        card.setPadding(dp(Ui.CARD_H), dp(Ui.CARD_H), dp(Ui.CARD_H), dp(Ui.CARD_H));
+        card.setBackground(Ui.elevatedCard(this));
+        card.setElevation(dp(1));
         return card;
     }
 
@@ -1362,7 +1364,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
     private LinearLayout section(String title, LinearLayout card) {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
-        wrap.setPadding(0, dp(14), 0, 0);
+        wrap.setPadding(0, dp(Ui.SECTION_GAP), 0, 0);
         if (title != null && !title.isEmpty()) {
             TextView head = Ui.sectionLabel(this, title);
             head.setPadding(dp(2), 0, 0, dp(6));

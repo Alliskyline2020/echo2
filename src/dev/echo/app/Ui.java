@@ -41,6 +41,12 @@ public final class Ui {
     public static final int RADIUS_SM = 6;
     public static final int RADIUS_MD = 10;
     public static final int RADIUS_LG = 14;
+    /** 页面左右边距 */
+    public static final int PAGE_H = 16;
+    /** 卡片内边距 */
+    public static final int CARD_H = 14;
+    /** 区块间垂直间距 */
+    public static final int SECTION_GAP = 12;
 
     private Ui() {
     }
@@ -54,6 +60,15 @@ public final class Ui {
         drawable.setColor(fillColor);
         drawable.setCornerRadius(dp(c, radiusDp));
         if (strokeColor != 0) drawable.setStroke(dp(c, 1), strokeColor);
+        return drawable;
+    }
+
+    /** 带轻微阴影的卡片（用 outline 模拟，无实际 shadow 性能开销） */
+    public static GradientDrawable elevatedCard(Context c) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(SURFACE);
+        drawable.setCornerRadius(dp(c, RADIUS_MD));
+        drawable.setStroke(dp(c, 1), Color.argb(20, 0, 0, 0)); // 极淡阴影描边
         return drawable;
     }
 
