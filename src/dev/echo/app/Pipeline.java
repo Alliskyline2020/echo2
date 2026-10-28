@@ -84,10 +84,12 @@ public final class Pipeline {
                 try {
                     File wav = new File(segment.path);
                     String text;
-                    if (SenseVoiceAsr.modelAvailable(context)) {
+                    try {
                         text = SenseVoiceAsr.transcribeWav(context, wav);
-                    } else {
-                        if (progress != null) progress.onState("SenseVoice 未安装，用 Gemma 转写…");
+                    } catch (Throwable svError) {
+                        // SenseVoice 失败（OOM/模型损坏）→ 降级到 Gemma
+                        Log.w(TAG, "SenseVoice 失败，降级 Gemma: " + svError.getMessage());
+                        if (progress != null) progress.onState("SenseVoice 降级，用 Gemma…");
                         text = engine.transcribe(context, wav, progress);
                     }
                     // LLM 转写纠错层：只修错字/去重复/规范标点，不改意思。

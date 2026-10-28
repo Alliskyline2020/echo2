@@ -560,6 +560,8 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             line.addView(Ui.text(this, timeStr, TEXT_LOW, Ui.Size.CAP, true));
             TextView body = Ui.text(this, " " + text, TEXT_HI, Ui.Size.SUB, false);
             body.setPadding(dp(8), 0, 0, 0);
+            body.setMaxLines(2);
+            body.setEllipsize(android.text.TextUtils.TruncateAt.END);
             line.addView(body, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             row.addView(line);
         } else {
