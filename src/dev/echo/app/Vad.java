@@ -40,6 +40,7 @@ public final class Vad {
         speechFrames = 0;
         silenceFrames = 0;
         inSpeech = false;
+        noiseFloorDb = MIN_SPEECH_DB; // 极静模式期间底噪可能过期，重置防止误判
     }
 
     public void push(short[] samples, long frameAtMs, Sink sink) {

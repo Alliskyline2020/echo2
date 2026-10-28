@@ -499,7 +499,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         homeBody.addView(spacer(6));
         List<Model.Session> sessions = store.sessions();
         if (sessions.isEmpty()) {
-            homeBody.addView(emptyCard("还没有记录", "点上面的「开始记录」，应用会自动分段保存。"));
+            homeBody.addView(emptyCard("下方按钮开始，你的话会变成文字", "点上面的「开始记录」，应用会自动分段保存。"));
             return;
         }
         String lastDay = "";
@@ -550,8 +550,9 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding(dp(12), dp(10), dp(12), dp(10));
 
-        // 单行头部：时间 + 转写（done 段省略状态标签，减少视觉噪音）
+        // 单行头部：时间 + 转写（通话来源加 📞 标记）
         String timeStr = clockFormat.format(new Date(segment.startedAt));
+        if ("call".equals(segment.speaker)) timeStr = "📞" + timeStr;
         String text = segment.transcript;
         if (text != null && !text.isEmpty()) {
             // 转写 + 时间在同一行（时间小字灰底，转写正文紧随）
@@ -722,7 +723,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         }
         if (matched.isEmpty() && due.isEmpty()) {
             list.addView(card(Ui.text(this, searchQuery.isEmpty()
-                    ? "还没有记忆，录一段话试试" : "没有匹配的记忆", TEXT_LOW, Ui.Size.SUB, false)));
+                    ? "你的偏好和习惯会自动沉淀在这里" : "没有匹配的记忆", TEXT_LOW, Ui.Size.SUB, false)));
             return;
         }
         if (searchQuery.isEmpty()) {
