@@ -251,6 +251,11 @@ public class MainActivity extends Activity implements RecorderService.Listener {
     private void finishOnboarding() {
         Model.Settings settings = store.settings();
         settings.onboarded = true;
+        if (!SenseVoiceAsr.modelAvailable(this)) {
+            Toast.makeText(this,
+                    "提示：把 sensevoice-model.onnx 推到 app files/ 目录可获最佳转写",
+                    Toast.LENGTH_LONG).show();
+        }
         store.saveSettings(settings);
         setContentView(buildUi());
         showTab(0);
