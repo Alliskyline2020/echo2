@@ -35,6 +35,7 @@ import android.widget.Toast;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -376,18 +377,23 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         homeBody.removeAllViews();
         long now = System.currentTimeMillis();
 
-        // 页头：品牌 + 一句话
-        TextView brand = Ui.text(this, "回声", TEXT_HI, Ui.Size.TITLE, true);
-        homeBody.addView(brand);
-        TextView tagline = Ui.text(this, "一直在记，重要的事不会漏", TEXT_MID, Ui.Size.CAP, false);
-        tagline.setPadding(0, dp(2), 0, 0);
-        homeBody.addView(tagline);
-        homeBody.addView(spacer(12));
+        // 日期行（品牌在启动器图标上，不需要每次重复）
+        TextView dateLine = Ui.text(this,
+                new SimpleDateFormat("M月d日 EEEE", Locale.CHINA).format(new Date(now)),
+                TEXT_LOW, Ui.Size.CAP, false);
+        homeBody.addView(dateLine);
+        homeBody.addView(spacer(10));
+
+        // 待办数据在洞察和快捷入口都需要，先算
+        List<Model.Todo> open = openTodos();
 
         // 现在值得处理的事（洞察：注意级 = warning 浅底，次级 = 凹陷面）
         List<Insight.Item> items = Insight.build(store, now);
+        // 只展示需要行动的洞察，nothing-yet 隐去（安静就是最好的状态）
+        items.removeIf(item -> "nothing-yet".equals(item.kind));
         if (!items.isEmpty()) {
-            for (Insight.Item item : items) {
+            int insightMax = Math.min(3, items.size());
+            for (int ii = 0; ii < insightMax; ii++) { Insight.Item item = items.get(ii);
                 boolean attention = "overdue".equals(item.kind) || "due-soon".equals(item.kind);
                 LinearLayout row = new LinearLayout(this);
                 row.setGravity(Gravity.CENTER_VERTICAL);
@@ -442,31 +448,8 @@ public class MainActivity extends Activity implements RecorderService.Listener {
                     ViewGroup.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             panel.addView(stop, stopParams);
         } else {
-            LinearLayout head = new LinearLayout(this);
-            head.setGravity(Gravity.CENTER_VERTICAL);
-            ImageView micDisc = new ImageView(this);
-            micDisc.setImageDrawable(Ui.dot(this, PRIMARY_SOFT, 44));
-            TextView micGlyph = Ui.text(this, "●", PRIMARY, Ui.Size.SUB, true);
-            micGlyph.setGravity(Gravity.CENTER);
-            micDisc.setForeground(null);
-            FrameLayout glyphWrap = new FrameLayout(this);
-            glyphWrap.addView(micDisc);
-            FrameLayout.LayoutParams glyphParams = new FrameLayout.LayoutParams(
-                    dp(44), dp(44), Gravity.CENTER);
-            micGlyph.setLayoutParams(glyphParams);
-            glyphWrap.addView(micGlyph);
-            head.addView(glyphWrap, new LinearLayout.LayoutParams(dp(44), dp(44)));
-
-            LinearLayout titles = new LinearLayout(this);
-            titles.setOrientation(LinearLayout.VERTICAL);
-            titles.setPadding(dp(12), 0, 0, 0);
-            titles.addView(Ui.text(this, "开始记录", TEXT_HI, Ui.Size.BODY, true));
-            titles.addView(Ui.text(this, "会议、行程、待办，都会记下来", TEXT_MID, Ui.Size.CAP, false));
-            head.addView(titles, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            panel.addView(head);
-
-            panel.addView(spacer(14));
-            recordButton = Ui.primaryButton(this, "开始记录");
+            // 精简：按钮即入口，不需要装饰性行
+            recordButton = Ui.primaryButton(this, "●  开始记录");
             recordButton.setOnClickListener(v -> startRecording());
             LinearLayout.LayoutParams recordParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -481,35 +464,29 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         }
         homeBody.addView(cardWrap(panel));
 
-        // 今日回顾（P2：每晚 21:30 自动生成，也可手动）
+        // 今日回顾：有内容才展示，没有就不占位
         String digest = store.getDigest(Store.todayKey());
-        LinearLayout digestCard = card();
-        boolean isEvening = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 21;
         if (digest != null) {
+            LinearLayout digestCard = card();
             digestCard.addView(Ui.text(this, "今日回顾", TEXT_MID, Ui.Size.SUB, true));
             digestCard.addView(spacer(4));
             digestCard.addView(Ui.text(this, digest, TEXT_HI, Ui.Size.SUB, false));
-            digestCard.addView(spacer(6));
-            Button regenerate = Ui.outlineButton(this, "重新生成", TEXT_MID);
-            regenerate.setOnClickListener(v -> startDigest());
-            digestCard.addView(regenerate);
-        } else {
-            digestCard.addView(Ui.text(this, "今日回顾", TEXT_MID, Ui.Size.SUB, true));
-            digestCard.addView(spacer(2));
-            digestCard.addView(Ui.text(this,
-                    isEvening ? "正在准备今晚的回顾…" : "晚上 21:30 自动生成今天的回顾",
-                    TEXT_LOW, Ui.Size.SUB, false));
+            homeBody.addView(cardWrap(digestCard));
         }
-        homeBody.addView(cardWrap(digestCard));
 
         // 快捷入口
         LinearLayout quick = card();
         int openCount = openTodos().size();
         int reviewCount = reviewDueCount();
-        quick.addView(quickRow("待办", openCount > 0 ? openCount + " 项没做" : "暂无", () -> showTab(2)));
+        String todoPreview = openCount > 0
+                ? open.get(0).task : "暂无";
+        String memPreview = activeMemories().isEmpty() ? "暂无"
+                : activeMemories().get(activeMemories().size() - 1).value;
+        quick.addView(quickRow("待办",
+                openCount > 0 ? openCount + " 项 · " + todoPreview : "暂无", () -> showTab(2)));
         quick.addView(Ui.divider(this));
-        quick.addView(quickRow("记忆", reviewCount > 0 ? reviewCount + " 条待复核"
-                : activeMemories().size() + " 条生效中", () -> showTab(1)));
+        quick.addView(quickRow("记忆",
+                reviewCount > 0 ? reviewCount + " 条待复核" : memPreview, () -> showTab(1)));
         homeBody.addView(cardWrap(quick));
 
         // 时间线
@@ -827,12 +804,10 @@ public class MainActivity extends Activity implements RecorderService.Listener {
 
         if (!item.evidence.isEmpty()) card.addView(quote(this, item.evidence));
 
-        String meta = "置信 " + Math.round(item.confidence * 100) + "%"
-                + " · " + dayTimeFormat.format(new Date(item.lastConfirmedAt))
-                + (superseded ? " · 已被新情况取代" : "")
-                + (semanticHit ? " · 语义匹配 " + Math.round(score * 100) + "%" : "");
-        TextView metaView = Ui.text(this, meta, semanticHit ? PRIMARY : TEXT_LOW, Ui.Size.CAP, false);
-        metaView.setPadding(0, dp(4), 0, 0);
+        String meta = dayTimeFormat.format(new Date(item.lastConfirmedAt))
+                + (superseded ? " · 已被取代" : "");
+        TextView metaView = Ui.text(this, meta, TEXT_LOW, Ui.Size.CAP, false);
+        metaView.setPadding(0, dp(3), 0, 0);
         card.addView(metaView);
         return card;
     }
@@ -859,28 +834,58 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         todosBody.addView(brand);
         todosBody.addView(spacer(12));
 
+        long now = System.currentTimeMillis();
         List<Model.Todo> open = openTodos();
         List<Model.Todo> done = new ArrayList<>();
         for (Model.Todo todo : store.todos()) {
             if (todo.done) done.add(todo);
         }
 
-        LinearLayout openCard = card();
-        if (open.isEmpty()) {
-            openCard.addView(Ui.text(this, "没有进行中的待办。录一段话，需要做的事会被自动提出来。",
-                    TEXT_LOW, Ui.Size.SUB, false));
+        // 按紧急度分组：逾期 → 今天 → 明天 → 之后 → 无日期
+        List<Model.Todo> overdue = new ArrayList<>();
+        List<Model.Todo> today = new ArrayList<>();
+        List<Model.Todo> tomorrow = new ArrayList<>();
+        List<Model.Todo> later = new ArrayList<>();
+        List<Model.Todo> noDate = new ArrayList<>();
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0);
+        long todayStart = cal.getTimeInMillis();
+        long tomorrowStart = todayStart + 86400_000L;
+        long dayAfterStart = tomorrowStart + 86400_000L;
+
+        for (Model.Todo todo : open) {
+            if (todo.dueAt > 0 && todo.dueAt < todayStart) overdue.add(todo);
+            else if (todo.dueAt >= todayStart && todo.dueAt < tomorrowStart) today.add(todo);
+            else if (todo.dueAt >= tomorrowStart && todo.dueAt < dayAfterStart) tomorrow.add(todo);
+            else if (todo.dueAt > 0) later.add(todo);
+            else noDate.add(todo);
+        }
+
+        int total = open.size();
+        if (total == 0) {
+            LinearLayout emptyCard = card();
+            emptyCard.addView(Ui.text(this, "暂无待办", TEXT_LOW, Ui.Size.SUB, false));
+            todosBody.addView(emptyCard);
         } else {
-            int shown = todosExpanded ? open.size() : Math.min(5, open.size());
-            for (int i = 0; i < shown; i++) todosBodySee(open.get(i), openCard);
-            if (open.size() > 5) {
-                TextView more = Ui.text(this,
-                        todosExpanded ? "收起" : "展开全部 " + open.size() + " 项  ›", PRIMARY, Ui.Size.SUB, false);
+            if (!overdue.isEmpty()) emitTodoGroup(todosBody, "逾期 · " + overdue.size(), overdue, DANGER);
+            if (!today.isEmpty()) emitTodoGroup(todosBody, "今天 · " + today.size(), today, WARNING);
+            if (!tomorrow.isEmpty()) emitTodoGroup(todosBody, "明天 · " + tomorrow.size(), tomorrow, TEXT_HI);
+            if (!later.isEmpty()) emitTodoGroup(todosBody, "之后 · " + later.size(), later, TEXT_MID);
+            if (!noDate.isEmpty()) emitTodoGroup(todosBody, "无日期 · " + noDate.size(), noDate, TEXT_LOW);
+
+            if (total > 5 && !todosExpanded) {
+                TextView more = Ui.text(this, "展开全部 " + total + " 项  ›", PRIMARY, Ui.Size.SUB, false);
                 more.setPadding(dp(2), dp(8), 0, 0);
-                more.setOnClickListener(v -> { todosExpanded = !todosExpanded; render(); });
-                openCard.addView(more);
+                more.setOnClickListener(v -> { todosExpanded = true; render(); });
+                todosBody.addView(more);
+            } else if (todosExpanded && total > 5) {
+                TextView less = Ui.text(this, "收起  ‹", TEXT_MID, Ui.Size.SUB, false);
+                less.setPadding(dp(2), dp(8), 0, 0);
+                less.setOnClickListener(v -> { todosExpanded = false; render(); });
+                todosBody.addView(less);
             }
         }
-        todosBody.addView(section("进行中 · " + open.size(), openCard));
 
         if (!done.isEmpty()) {
             LinearLayout doneCard = card();
@@ -894,13 +899,33 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         }
     }
 
+    private void emitTodoGroup(String label, List<Model.Todo> items, int color) {
+        // delegate
+    }
+
+    private void emitTodoGroup(ViewGroup parent, String label, List<Model.Todo> items, int color) {
+        LinearLayout groupCard = card();
+        int shown = todosExpanded ? items.size() : Math.min(3, items.size());
+        for (int i = 0; i < shown && i < items.size(); i++) {
+            todosBodySee(items.get(i), groupCard);
+        }
+        if (items.size() > shown) {
+            TextView more = Ui.text(this, "还有 " + (items.size() - shown) + " 项…", TEXT_LOW, Ui.Size.CAP, false);
+            more.setPadding(dp(4), dp(4), 0, 0);
+            groupCard.addView(more);
+        }
+        parent.addView(section(label, groupCard));
+    }
+
     private void todosBodySee(Model.Todo todo, LinearLayout parent) {
         long now = System.currentTimeMillis();
         String level = Reminder.decide(todo, now);
+        boolean urgent = "overdue".equals(level) || "high".equals(todo.priority);
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(dp(2), dp(9), dp(2), dp(9));
-        row.setBackground(Ui.clickable(this, Ui.pill(this, Ui.RADIUS_SM, SURFACE_MUTED)));
+        row.setBackground(Ui.clickable(this, Ui.pill(this, Ui.RADIUS_SM,
+                urgent ? Color.argb(18, 180, 35, 24) : Color.TRANSPARENT)));
 
         TextView check = new TextView(this);
         check.setGravity(Gravity.CENTER);
@@ -931,10 +956,11 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         } else if (!todo.timeText.isEmpty()) {
             meta.append(todo.timeText);
         }
-        if (!todo.who.isEmpty()) meta.append(" · 与").append(todo.who);
+        if (!todo.who.isEmpty()) meta.append(" · ").append(todo.who);
         if (meta.length() > 0) {
+            boolean isOverdue = Reminder.OVERDUE.equals(level);
             TextView metaView = Ui.text(this, meta.toString(),
-                    Reminder.OVERDUE.equals(level) ? DANGER : TEXT_LOW, Ui.Size.CAP, false);
+                    isOverdue ? DANGER : TEXT_LOW, Ui.Size.CAP, false);
             metaView.setPadding(0, dp(2), 0, 0);
             textCol.addView(metaView);
         }
@@ -943,7 +969,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             evidence.setPadding(0, dp(2), 0, 0);
             textCol.addView(evidence);
         }
-        row.addView(textCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(textCol, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         if ("high".equals(todo.priority)) {
             row.addView(Ui.chip(this, "高", DANGER_BG, DANGER));
