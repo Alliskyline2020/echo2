@@ -1057,16 +1057,6 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         settingsBody.addView(brand);
         settingsBody.addView(spacer(12));
 
-        LinearLayout model = card();
-        model.addView(line("Gemma 4 E2B · 转写与整理", TEXT_HI));
-        File modelFile = new File(GemmaEngine.modelPath(this));
-        model.addView(line(modelFile.isFile()
-                ? "已就绪 · " + (modelFile.length() / 1024 / 1024) + " MB · 本机推理"
-                : "未找到模型文件：" + GemmaEngine.modelPath(this), TEXT_LOW));
-        model.addView(line(MemoryEmbedder.available(this)
-                ? "EmbeddingGemma 2 · 语义检索已就绪" : "语义检索未安装", TEXT_LOW));
-        settingsBody.addView(section("推理", model));
-
         // 声纹：录入一次，之后每段话自动判断是不是主人说的
         LinearLayout voice = card();
         boolean enrolled = SpeakerId.enrolled(this);
@@ -1116,30 +1106,6 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         voice.addView(enrollButton);
         voice.addView(enrollState);
         settingsBody.addView(section("声纹", voice));
-
-        settingsBody.addView(section("整理节奏", optionGroup(
-                new String[]{"攒够就整理", "只在充电时整理", "只手动整理"},
-                new String[]{"停止录音后攒一批再跑", "只在充电时批量跑，最省电", "完全不自动"},
-                new String[]{"balanced", "charging", "manual"},
-                store.settings().batchPolicy,
-                key -> {
-                    Model.Settings value = store.settings();
-                    value.batchPolicy = key;
-                    store.saveSettings(value);
-                    render();
-                })));
-
-        settingsBody.addView(section("麦克风处理", optionGroup(
-                new String[]{"降噪", "回声消除 + 降噪", "原始麦克风"},
-                new String[]{"DSP 降噪图，最贴语音识别", "边播放边录时用，借 DSP 回声消除", "不过 DSP，原始数据自己算"},
-                new String[]{"voice-recognition", "voice-communication", "unprocessed"},
-                store.settings().micProfile,
-                key -> {
-                    Model.Settings value = store.settings();
-                    value.micProfile = key;
-                    store.saveSettings(value);
-                    render();
-                })));
 
         int segments = 0;
         for (Model.Session session : store.sessions()) segments += session.segments.size();
