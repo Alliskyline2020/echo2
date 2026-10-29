@@ -35,6 +35,27 @@ public final class Model {
         public List<Segment> segments = new ArrayList<>();
     }
 
+
+    /**
+     * 活动块：用户唯一看到的单位。
+     * 一段时间内做了什么（AI 生成摘要）+ 从中提取的待办/记忆计数。
+     * 底层的 Segment/WAV/转写原文对用户完全不可见。
+     */
+    public static final class ActivityBlock {
+        public String id;
+        public long startTime;
+        public long endTime;
+        /** AI 生成的一段话摘要（"和王总讨论装修，确定了预算"） */
+        public String summary = "";
+        /** 这段时间提取了几条待办 */
+        public int todoCount;
+        /** 这段时间沉淀了几条记忆 */
+        public int memoryCount;
+        /** 关联的 sessionId（内部溯源用，用户不可见） */
+        public String sessionId;
+        public long createdAt;
+    }
+
     /** 待办：从录音里抽出来，可勾选完成 */
     public static final class Todo {
         public String id;

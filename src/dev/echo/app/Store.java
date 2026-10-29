@@ -37,6 +37,7 @@ public final class Store {
     private List<Model.Session> sessions;
     private List<Model.Todo> todos;
     private List<Model.MemoryItem> memories;
+    private List<Model.ActivityBlock> activities;
     private Model.Settings settings;
     private final java.util.Map<String, String> digests;
 
@@ -65,6 +66,7 @@ public final class Store {
         sessions = read("sessions.json", new TypeToken<List<Model.Session>>() { }.getType());
         todos = read("todos.json", new TypeToken<List<Model.Todo>>() { }.getType());
         memories = read("memories.json", new TypeToken<List<Model.MemoryItem>>() { }.getType());
+        activities = read("activities.json", new TypeToken<List<Model.ActivityBlock>>() { }.getType());
         settings = readObject("settings.json", Model.Settings.class);
         if (settings == null) settings = new Model.Settings();
         digests = readMap("digests.json",
@@ -291,7 +293,16 @@ public final class Store {
         return new ArrayList<>(memories);
     }
 
-    public synchronized void addMemory(Model.MemoryItem item) {
+        public synchronized List<Model.ActivityBlock> activities() {
+        return new ArrayList<>(activities);
+    }
+
+    public synchronized void addActivity(Model.ActivityBlock block) {
+        activities.add(block);
+        write("activities.json", activities);
+    }
+
+public synchronized void addMemory(Model.MemoryItem item) {
         memories.add(item);
         write("memories.json", memories);
     }

@@ -159,7 +159,7 @@ public final class Pipeline {
     }
 
     /** 解析模型输出的 JSON 并合并进待办/记忆库 */
-    static void applyExtraction(Context context, Store store, String sessionId, String raw) {
+    static int applyExtraction(Context context, Store store, String sessionId, String raw) {
         String text = raw;
         Log.i(TAG, "extraction in: len=" + text.length()
                 + " head=" + text.substring(0, Math.min(60, text.length())).replace('\n', ' ')
@@ -170,7 +170,7 @@ public final class Pipeline {
         if (json == null) {
             Log.w(TAG, "extraction: 没有完整的 JSON 对象（可能被截断），len=" + text.length()
                     + " tail=" + text.substring(Math.max(0, text.length() - 80)).replace('\n', ' '));
-            return;
+            return 0;
         }
         text = json;
         JsonObject root;
@@ -178,11 +178,12 @@ public final class Pipeline {
             root = JsonParser.parseString(text).getAsJsonObject();
         } catch (Throwable error) {
             Log.w(TAG, "extraction parse failed, raw=" + text.substring(0, Math.min(400, text.length())));
-            return;
+            return 0;
         }
         long now = System.currentTimeMillis();
 
         JsonArray todoArray = asArray(root.get("todos"));
+        int todoCount = 0;
         if (todoArray != null) {
             for (JsonElement element : todoArray) {
                 JsonObject item = asObject(element);
@@ -304,6 +305,7 @@ public final class Pipeline {
                 store.addMemory(memory);
             }
         }
+        return todoCount;
     }
 
     /** 从第一个 { 起做括号深度扫描（跳过字符串字面量），返回第一个完整 JSON 对象 */
@@ -412,6 +414,39 @@ public final class Pipeline {
             offset = end;
         }
         return merged.toString();
+    }
+
+    /** 生成活动摘要：用户唯一看到的展示单位（录音/转写完全不可见） */
+    private static void generateActivitySummary(Context context, Store store,
+            String sessionId, String transcript, int todoCount) {
+        try {
+            GemmaEngine engine = GemmaEngine.get();
+            engine.ensureReady(context, null);
+            String summary = engine.summarize(context,
+                    "请用一两句话概括这段时间发生了什么（做了什么事、和谁、关键决定）：\n" + transcript,
+                    null);
+            if (summary == null || summary.trim().isEmpty()) return;
+
+            Model.Session session = null;
+            for (Model.Session s : store.sessions()) {
+                if (s.id.equals(sessionId)) { session = s; break; }
+            }
+            if (session == null) return;
+
+            Model.ActivityBlock block = new Model.ActivityBlock();
+            block.id = java.util.UUID.randomUUID().toString();
+            block.startTime = session.startedAt;
+            block.endTime = System.currentTimeMillis();
+            block.summary = summary.trim();
+            block.todoCount = todoCount;
+            block.memoryCount = store.memories().size();
+            block.sessionId = sessionId;
+            block.createdAt = System.currentTimeMillis();
+            store.addActivity(block);
+            Log.i(TAG, "活动摘要已生成：" + summary.trim());
+        } catch (Throwable error) {
+            Log.w(TAG, "activity summary failed", error);
+        }
     }
 
 }
