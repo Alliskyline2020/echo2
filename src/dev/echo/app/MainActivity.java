@@ -493,31 +493,49 @@ public class MainActivity extends Activity implements RecorderService.Listener {
                 reviewCount > 0 ? reviewCount + " 条待复核" : memPreview, () -> showTab(1)));
         homeBody.addView(cardWrap(quick));
 
-        // 时间线
+        // 活动摘要（用户唯一看到的单位：做了什么 + 提取了几件事）
         homeBody.addView(spacer(16));
-        homeBody.addView(Ui.sectionLabel(this, "记录"));
+        homeBody.addView(Ui.sectionLabel(this, "今天做了什么"));
         homeBody.addView(spacer(6));
-        List<Model.Session> sessions = store.sessions();
-        if (sessions.isEmpty()) {
-            homeBody.addView(emptyCard("下方按钮开始，你的话会变成文字", "点上面的「开始记录」，应用会自动分段保存。"));
+        List<Model.ActivityBlock> activities = store.activities();
+        if (activities.isEmpty()) {
+            homeBody.addView(emptyCard("正在聆听",
+                    "你说的话会自动变成待办和记忆，不需要手动操作。"));
             return;
         }
-        String lastDay = "";
-        for (int i = sessions.size() - 1; i >= 0; i--) {
-            Model.Session session = sessions.get(i);
-            String day = dayFormat.format(new Date(session.startedAt));
-            if (!day.equals(lastDay)) {
-                homeBody.addView(Ui.sectionLabel(this, day));
-                homeBody.addView(spacer(4));
-                lastDay = day;
+        SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.CHINA);
+        int shown = recordsExpanded ? activities.size() : Math.min(5, activities.size());
+        for (int i = activities.size() - 1; i >= activities.size() - shown && i >= 0; i--) {
+            Model.ActivityBlock block = activities.get(i);
+            LinearLayout card = card();
+            // 时间范围 + 摘要
+            String timeRange = timeFmt.format(new Date(block.startTime))
+                    + " - " + timeFmt.format(new Date(block.endTime));
+            TextView time = Ui.text(this, timeRange, TEXT_LOW, Ui.Size.CAP, true);
+            card.addView(time);
+            TextView summary = Ui.text(this, block.summary, TEXT_HI, Ui.Size.SUB, false);
+            summary.setPadding(0, dp(4), 0, 0);
+            card.addView(summary);
+            // 提取计数
+            if (block.todoCount > 0 || block.memoryCount > 0) {
+                TextView counts = Ui.text(this,
+                        (block.todoCount > 0 ? block.todoCount + " 项待办" : "")
+                        + (block.todoCount > 0 && block.memoryCount > 0 ? " · " : "")
+                        + (block.memoryCount > 0 ? block.memoryCount + " 条记忆" : ""),
+                        PRIMARY, Ui.Size.CAP, false);
+                counts.setPadding(0, dp(4), 0, 0);
+                card.addView(counts);
             }
-            LinearLayout sessionCard = card();
-            for (int j = session.segments.size() - 1; j >= 0; j--) {
-                sessionCard.addView(segmentRow(session.segments.get(j)));
-                if (j > 0) sessionCard.addView(Ui.divider(this));
-            }
-            homeBody.addView(cardWrap(sessionCard));
-            homeBody.addView(spacer(10));
+            homeBody.addView(cardWrap(card));
+            homeBody.addView(spacer(8));
+        }
+        if (activities.size() > 5) {
+            TextView more = Ui.text(this,
+                    recordsExpanded ? "收起" : "展开全部 " + activities.size() + " 个活动  ›",
+                    PRIMARY, Ui.Size.SUB, false);
+            more.setPadding(dp(2), dp(8), 0, 0);
+            more.setOnClickListener(v -> { recordsExpanded = !recordsExpanded; render(); });
+            homeBody.addView(more);
         }
     }
 
