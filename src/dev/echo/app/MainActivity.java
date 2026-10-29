@@ -1110,7 +1110,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         int segments = 0;
         for (Model.Session session : store.sessions()) segments += session.segments.size();
         LinearLayout data = card();
-        data.addView(line(store.sessions().size() + " 次记录 · " + segments + " 段 · "
+        data.addView(line(store.activities().size() + " 个活动 · "
                 + store.todos().size() + " 待办 · " + store.memories().size() + " 条记忆", TEXT_HI));
         data.addView(spacer(8));
         Button clear = Ui.outlineButton(this, "清空全部数据", DANGER);
@@ -1119,8 +1119,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         settingsBody.addView(section("数据", data));
 
         LinearLayout about = card();
-        about.addView(line("回声 0.3.0-native", TEXT_MID));
-        about.addView(line("Gemma 4 E2B + EmbeddingGemma 2 · LiteRT-LM · 全部推理在本机完成", TEXT_LOW));
+        about.addView(line("回声 2.0", TEXT_MID));
         settingsBody.addView(section("关于", about));
     }
 
