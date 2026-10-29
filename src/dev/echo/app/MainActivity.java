@@ -90,7 +90,9 @@ public class MainActivity extends Activity implements RecorderService.Listener {
     private volatile float[] queryVector;
     private volatile String queryVectorFor = "";
     private volatile boolean searching = false;
-    private Button[] tabButtons;
+    private LinearLayout[] tabButtons;
+    private ImageView[] tabIcons;
+    private TextView[] tabLabels;
     private volatile boolean enrolling = false;
     private boolean materialExpanded = false;
     private boolean todosExpanded = false;
@@ -298,34 +300,49 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         LinearLayout tabs = new LinearLayout(this);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setBackgroundColor(SURFACE);
-        String[] names = {"◉ 记录", "◆ 记忆", "✓ 待办", "⚙ 设置"};
-        tabButtons = new Button[names.length];
-        for (int i = 0; i < names.length; i++) {
+        tabs.setElevation(dp(4));
+        int[] icons = {R.drawable.ic_mic, R.drawable.ic_auto_awesome, R.drawable.ic_check_circle, R.drawable.ic_tune};
+        String[] labels = {"记录", "记忆", "待办", "设置"};
+        tabButtons = new LinearLayout[labels.length];
+        tabIcons = new ImageView[labels.length];
+        tabLabels = new TextView[labels.length];
+        for (int i = 0; i < labels.length; i++) {
             final int index = i;
-            Button button = new Button(this);
-            button.setAllCaps(false);
-            button.setText(names[i]);
-            button.setAllCaps(false);
-            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            button.setStateListAnimator(null);
-            button.setMinHeight(0);
-            button.setPadding(0, dp(10), 0, dp(10));
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            params.setMargins(dp(4), 0, dp(4), 0);
-            button.setLayoutParams(params);
-            button.setOnClickListener(v -> showTab(index));
-            tabs.addView(button);
-            tabButtons[i] = button;
+            LinearLayout tab = new LinearLayout(this);
+            tab.setOrientation(LinearLayout.VERTICAL);
+            tab.setGravity(Gravity.CENTER);
+            tab.setPadding(0, dp(8), 0, dp(8));
+
+            ImageView icon = new ImageView(this);
+            icon.setImageResource(icons[i]);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(22), dp(22));
+            iconParams.gravity = Gravity.CENTER_HORIZONTAL;
+            icon.setLayoutParams(iconParams);
+            tab.addView(icon);
+
+            TextView label = new TextView(this);
+            label.setText(labels[i]);
+            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            label.setGravity(Gravity.CENTER);
+            label.setPadding(0, dp(3), 0, 0);
+            tab.addView(label);
+
+            tab.setOnClickListener(v -> showTab(index));
+            tabs.addView(tab, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            tabButtons[i] = tab;
+            tabIcons[i] = icon;
+            tabLabels[i] = label;
         }
         return tabs;
     }
 
     private void styleTab(int index, boolean selected) {
-        Button button = tabButtons[index];
-        button.setBackground(Ui.pill(this, dp(20), selected ? PRIMARY_SOFT : Color.TRANSPARENT));
-        button.setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
-        button.setTextColor(selected ? PRIMARY : TEXT_MID);
+        LinearLayout tab = tabButtons[index];
+        tab.setBackground(Ui.pill(this, dp(14), selected ? PRIMARY_SOFT : Color.TRANSPARENT));
+        int color = selected ? PRIMARY : TEXT_MID;
+        tabIcons[index].setColorFilter(color);
+        tabLabels[index].setTextColor(color);
+        tabLabels[index].setTypeface(selected ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
     }
 
     private void showTab(int index) {
@@ -413,6 +430,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
                 ImageView dot = new ImageView(this);
                 dot.setImageDrawable(Ui.dot(this, dotColor, 6));
                 row.addView(dot);
+                // (keep dot, it's subtle)
                 TextView text = Ui.text(this, item.text,
                         attention ? WARNING : TEXT_MID, Ui.Size.SUB, false);
                 text.setPadding(dp(9), 0, 0, 0);
@@ -509,8 +527,8 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             Model.ActivityBlock block = activities.get(i);
             LinearLayout card = card();
             // 时间范围 + 摘要
-            String timeRange = timeFmt.format(new Date(block.startTime))
-                    + " - " + timeFmt.format(new Date(block.endTime));
+            String timeRange = "🕐 " + timeFmt.format(new Date(block.startTime))
+                    + " – " + timeFmt.format(new Date(block.endTime));
             TextView time = Ui.text(this, timeRange, TEXT_LOW, Ui.Size.CAP, true);
             card.addView(time);
             TextView summary = Ui.text(this, block.summary, TEXT_HI, Ui.Size.SUB, false);
@@ -519,9 +537,9 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             // 提取计数
             if (block.todoCount > 0 || block.memoryCount > 0) {
                 TextView counts = Ui.text(this,
-                        (block.todoCount > 0 ? block.todoCount + " 项待办" : "")
-                        + (block.todoCount > 0 && block.memoryCount > 0 ? " · " : "")
-                        + (block.memoryCount > 0 ? block.memoryCount + " 条记忆" : ""),
+                        (block.todoCount > 0 ? "✓ " + block.todoCount + " 待办" : "")
+                        + (block.todoCount > 0 && block.memoryCount > 0 ? "  " : "")
+                        + (block.memoryCount > 0 ? "✨ " + block.memoryCount + " 记忆" : ""),
                         PRIMARY, Ui.Size.CAP, false);
                 counts.setPadding(0, dp(4), 0, 0);
                 card.addView(counts);
