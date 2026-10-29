@@ -67,6 +67,11 @@ public final class Store {
         todos = read("todos.json", new TypeToken<List<Model.Todo>>() { }.getType());
         memories = read("memories.json", new TypeToken<List<Model.MemoryItem>>() { }.getType());
         activities = read("activities.json", new TypeToken<List<Model.ActivityBlock>>() { }.getType());
+        // 自愈迁移：删除旧格式活动（没有 title 字段的是旧版生成的）
+        if (activities != null) {
+            boolean changed = activities.removeIf(a -> a.title == null || a.title.isEmpty());
+            if (changed) Log.i("echo-store", "清理了旧格式活动");
+        }
         settings = readObject("settings.json", Model.Settings.class);
         if (settings == null) settings = new Model.Settings();
         digests = readMap("digests.json",
