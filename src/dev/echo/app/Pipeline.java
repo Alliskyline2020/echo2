@@ -149,7 +149,23 @@ public final class Pipeline {
                         briefing = briefing.substring(briefing.length() - 2400);
                     }
                     String raw = engine.extract(context, briefing, progress);
-                    applyExtraction(context, store, session.id, raw);
+                    // 清洗 markdown 代码块标记
+                    if (raw != null) {
+                        raw = raw.replace("/* markdown */", "").trim();
+                        raw = raw.replace("\u0060\u0060\u0060json", "").replace("\u0060\u0060\u0060", "").trim();
+                    }
+                    int todoCount = 0;
+                    try {
+                        todoCount = applyExtraction(context, store, session.id, raw);
+                    } catch (Throwable extractError) {
+                        Log.w(TAG, "抽取失败但活动照常生成: " + extractError.getMessage());
+                    }
+                    // 无论抽取成败，活动摘要都生成
+                    try {
+                        generateActivitySummary(context, store, session.id, briefing, todoCount);
+                    } catch (Throwable summaryError) {
+                        Log.w(TAG, "活动摘要失败: " + summaryError.getMessage());
+                    }
                 } catch (Throwable error) {
                     Log.w(TAG, "extract failed", error);
                 }
@@ -189,6 +205,8 @@ public final class Pipeline {
                 JsonObject item = asObject(element);
                 if (item == null) continue;
                 String task = firstString(item, "task", "title", "text", "content");
+                // task 为空 = 模型输出了废条目，直接跳过
+                if (task == null || task.trim().isEmpty()) continue;
                 String timeText = firstString(item, "time", "timeText", "when", "date");
                 String evidence = firstString(item, "evidence");
                 // 模型偶尔把内容写进 evidence 而 task 留空——用 evidence 兜底，并清掉说话人标记

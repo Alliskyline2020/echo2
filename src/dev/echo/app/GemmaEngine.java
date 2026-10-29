@@ -120,25 +120,22 @@ public final class GemmaEngine {
     public synchronized String extract(Context context, String transcript, Progress progress) throws Exception {
         ensureReady(context, progress);
         if (progress != null) progress.onState("正在整理…");
-        String prompt = "下面是一段录音的转写，每行标注了时间和说话人："
-                + "【主人】= 手机主人，【他人】= 周围的人或设备播放的内容，【未识别】= 不确定。请抽取三部分：\n"
-                + "1) summary：一句话概括（涵盖主人自己的事与环境中值得关注的内容）。\n"
-                + "2) todos：需要做的事。规则：\n"
-                + "  - 【主人】自己承诺的事：照常收；\n"
-                + "  - 【他人】或对话中明确指派给主人的任务（如\"麻烦你把样品寄过来\"、\"你明天交报告\"）：也收，task 开头加[受托]；\n"
-                + "  - 【他人】自己的闲聊/自己做的事：不收；\n"
-                + "  - 语音助手提示语、系统播报（如\"逐字转写这段音频\"）：绝不收。\n"
-                + "每条 {\"task\":\"\",\"time\":\"\",\"who\":\"\",\"evidence\":\"\",\"priority\":\"normal\"}。"
-                + "time 填原文时间短语（没有就空串）；who 是涉及的人；"
-                + "evidence 是原文依据（不超过30字，标注说话人）；priority 只有 high/normal。\n"
-                + "3) memories：两类都收：\n"
-                + "  a) 关于【主人】的偏好/状态/事实 → kind 用 preference/state/fact/event；\n"
-                + "  b) 【他人】或【未识别】中有价值的信息素材（话题、观点、新闻要点、用户正在听/参与的内容）"
-                + "→ kind 固定为\"material\"，subject 格式\"素材.主题\"（如 素材.AI安全），value=一句话要点，confidence 0-1。\n"
-                + "每条 {\"kind\":\"\",\"subject\":\"\",\"value\":\"\",\"confidence\":0.8,\"evidence\":\"\"}，"
-                + "evidence 不超过30字。同一主题复用同一 subject。\n"
-                + "只输出 JSON：{\"summary\":\"\",\"todos\":[],\"memories\":[]}。没有的项给空数组。\n\n"
-                + "转写：\n" + transcript;
+        String prompt = "你是中文助手。必须全程使用简体中文输出，禁止任何其他语言。\n"
+                + "下面是一段录音的转写，标注了说话人：【主人】=手机主人，【他人】=周围的人，【未识别】=不确定。\n"
+                + "首先判断内容类型：\n"
+                + "- 如果是讲座、播客、视频等单向输出的内容（没有和主人对话），只需提取 memories（素材），todos 给空数组\n"
+                + "- 如果是真实对话，按以下规则抽取：\n"
+                + "  todos：\n"
+                + "  - 【主人】承诺的事：收，task 写具体动作；\n"
+                + "  - 【他人】明确指派主人的（如\"你把报告交一下\"）：收，task 开头加[受托]；\n"
+                + "  - 没有具体动作或时间的，不收；task 不许为空串，空的话整条删掉不要输出\n"
+                + "  memories：\n"
+                + "  - 【主人】的偏好/状态/事实 → kind 用 preference/state/fact/event\n"
+                + "  - 环境中的信息素材（话题、观点）→ kind=\"material\"，subject=\"素材.主题\"\n"
+                + "  - value 必须是一句有意义的中文完整句，不许是碎片\n"
+                + "\n输出格式（严格 JSON，不要 markdown 代码块）：\n"
+                + "{\"summary\":\"一句中文概括\",\"todos\":[{\"task\":\"具体动作\",\"time\":\"时间短语\",\"who\":\"人\",\"evidence\":\"原文依据\",\"priority\":\"normal\"}],\"memories\":[{\"kind\":\"类型\",\"subject\":\"类别.对象\",\"value\":\"一句话\",\"confidence\":0.8,\"evidence\":\"原文\"}]}\n"
+                + "没有的项给空数组。\n\n转写：\n" + transcript;
         Message message = new Message(
                 Role.USER,
                 Contents.Companion.of(new Content.Text(prompt)),

@@ -170,23 +170,32 @@ public class MainActivity extends Activity implements RecorderService.Listener {
 
         root.addView(spacer(28));
         String[] lines = {
-                "回声会在后台安静地听，把对话里",
-                "你的约定和重要的事记下来。",
+                "回声会在后台安静地听，把你的待办和重要的事自动记下来。",
                 "",
-                "为了让它分清「你说的」和「别人说的」，",
-                "先花 15 秒录一下你的声音：",
+                "为了让它分清你和别人的声音，",
+                "请按提示读 3 句话（共 15 秒）：",
         };
         for (String lineText : lines) {
             TextView view = Ui.text(this, lineText, TEXT_MID, Ui.Size.SUB, false);
             view.setGravity(Gravity.CENTER);
             root.addView(view);
         }
-        root.addView(spacer(24));
+        root.addView(spacer(16));
+
+        // 引导文字：用户照着说的内容
+        TextView promptText = Ui.text(this, "", TEXT_HI, Ui.Size.BODY, true);
+        promptText.setGravity(Gravity.CENTER);
+        promptText.setPadding(dp(16), dp(12), dp(16), dp(12));
+        promptText.setBackground(Ui.pill(this, dp(12), PRIMARY_SOFT));
+        promptText.setVisibility(View.GONE);
+        root.addView(promptText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(spacer(8));
 
         boolean modelReady = SpeakerId.modelAvailable(this);
         final Button skip = Ui.outlineButton(this, "跳过，稍后在设置里录入", TEXT_MID);
         Button enroll = Ui.primaryButton(this,
-                modelReady ? "录入声纹（15 秒自然说话）" : "先跳过（声纹模型未安装）");
+                modelReady ? "开始录入（跟读 3 句话）" : "先跳过（声纹模型未安装）");
         TextView enrollState = Ui.text(this, "", PRIMARY, Ui.Size.SUB, true);
         enrollState.setGravity(Gravity.CENTER);
         enrollState.setPadding(0, dp(10), 0, 0);
@@ -203,14 +212,27 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             enroll.setVisibility(View.GONE);
             skip.setVisibility(View.GONE);
             cancelEnroll.setVisibility(View.VISIBLE);
-            enrollState.setText("正在聆听… 15 秒");
+            promptText.setVisibility(View.VISIBLE);
+            enrollState.setText("请跟着念…");
+            
+            String[] phrases = {
+                "今天天气不错，出去走走吧",
+                "明天下午三点，有个会议要开",
+                "好的我知道了，回头联系"
+            };
+            
             SpeakerId.captureAndEnroll(this, 15, new SpeakerId.CaptureListener() {
                 @Override public void onTick(int remainSeconds) {
-                    runOnUiThread(() -> enrollState.setText(
-                            remainSeconds > 0 ? "正在聆听… 还剩 " + remainSeconds + " 秒" : "正在生成声纹…"));
+                    runOnUiThread(() -> {
+                        // 每 5 秒切换一句引导文字
+                        int idx = remainSeconds > 10 ? 0 : remainSeconds > 5 ? 1 : 2;
+                        promptText.setText("「" + phrases[idx] + "」");
+                        enrollState.setText("第 " + (idx + 1) + "/3 句 · 还剩 " + remainSeconds + " 秒");
+                    });
                 }
                 @Override public void onSuccess() {
                     runOnUiThread(() -> {
+                        promptText.setVisibility(View.GONE);
                         Toast.makeText(MainActivity.this, "声纹已录入，开始使用", Toast.LENGTH_SHORT).show();
                         finishOnboarding();
                     });
@@ -222,10 +244,12 @@ public class MainActivity extends Activity implements RecorderService.Listener {
                             enroll.setVisibility(View.VISIBLE);
                             skip.setVisibility(View.VISIBLE);
                             cancelEnroll.setVisibility(View.GONE);
+                            promptText.setVisibility(View.GONE);
                             enrollState.setText("已取消");
                             return;
                         }
                         Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                        promptText.setVisibility(View.GONE);
                         enrollState.setText(message);
                         enroll.setVisibility(View.VISIBLE);
                         skip.setVisibility(View.VISIBLE);
