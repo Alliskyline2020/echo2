@@ -440,10 +440,23 @@ public final class Pipeline {
         try {
             GemmaEngine engine = GemmaEngine.get();
             engine.ensureReady(context, null);
-            String summary = engine.summarize(context,
-                    "请用一两句话概括这段时间发生了什么（做了什么事、和谁、关键决定）：\n" + transcript,
-                    null);
-            if (summary == null || summary.trim().isEmpty()) return;
+            String raw = engine.activitySummary(context, transcript, null);
+            if (raw == null || raw.trim().isEmpty()) return;
+            // 清洗 markdown
+            raw = raw.replace("```json", "").replace("```", "").trim();
+            
+            // 解析 {"title":"...","description":"..."}
+            String title = "";
+            String description = "";
+            try {
+                com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+                title = obj.has("title") ? obj.get("title").getAsString() : "";
+                description = obj.has("description") ? obj.get("description").getAsString() : "";
+            } catch (Throwable parseError) {
+                // JSON 解析失败，把 raw 当 description 用
+                description = raw;
+            }
+            if (title.isEmpty() && description.isEmpty()) return;
 
             Model.Session session = null;
             for (Model.Session s : store.sessions()) {
@@ -455,13 +468,16 @@ public final class Pipeline {
             block.id = java.util.UUID.randomUUID().toString();
             block.startTime = session.startedAt;
             block.endTime = System.currentTimeMillis();
-            block.summary = summary.trim();
+            block.title = title;
+            block.summary = description;
+            block.transcript = transcript != null && transcript.length() > 500
+                    ? transcript.substring(0, 500) + "…" : transcript;
             block.todoCount = todoCount;
             block.memoryCount = store.memories().size();
             block.sessionId = sessionId;
             block.createdAt = System.currentTimeMillis();
             store.addActivity(block);
-            Log.i(TAG, "活动摘要已生成：" + summary.trim());
+            Log.i(TAG, "活动摘要：" + block.summary);
         } catch (Throwable error) {
             Log.w(TAG, "activity summary failed", error);
         }

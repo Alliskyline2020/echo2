@@ -45,7 +45,9 @@ public final class Model {
         public String id;
         public long startTime;
         public long endTime;
-        /** AI 生成的一段话摘要（"和王总讨论装修，确定了预算"） */
+        /** AI 生成的短标题（"装修讨论"、"项目会议"） */
+        public String title = "";
+        /** AI 生成的一句话描述 */
         public String summary = "";
         /** 这段时间提取了几条待办 */
         public int todoCount;
