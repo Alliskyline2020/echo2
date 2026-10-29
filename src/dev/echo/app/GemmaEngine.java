@@ -194,6 +194,27 @@ public final class GemmaEngine {
         return send(message, 1024);
     }
 
+    /**
+     * 语义切分：把一段长转写按话题/活动边界切成多个语义段。
+     * 返回 JSON 数组：[{"topic":"...","content":"..."}]
+     */
+    public synchronized String segmentTopics(Context context, String fullTranscript, Progress progress) throws Exception {
+        ensureReady(context, progress);
+        if (progress != null) progress.onState("按话题切分…");
+        String prompt = "下面是一段连续录音的转写文本。请按话题/活动边界把它切成若干段。"
+                + "每段是一个完整的话题或活动，不要把不同话题混在一起。\n"
+                + "输出 JSON 数组，每项 {\"topic\":\"话题名\",\"content\":\"该段的完整转写内容\"}。\n"
+                + "如果整个转写都是同一个话题，返回只有一个元素的数组。\n"
+                + "只输出 JSON 数组，不要其他内容。\n\n"
+                + "转写文本：\n" + fullTranscript;
+        Message message = new Message(
+                Role.USER,
+                Contents.Companion.of(new Content.Text(prompt)),
+                Collections.emptyList(),
+                Collections.emptyMap());
+        return send(message, 1024);
+    }
+
     /** 开放式小结生成（今日回顾 / 记忆合并共用）：输入简报，输出纯文本 */
     public synchronized String summarize(Context context, String brief, Progress progress) throws Exception {
         ensureReady(context, progress);

@@ -10,6 +10,7 @@ import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.util.Calendar;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -85,9 +86,14 @@ public final class Pipeline {
                     File wav = new File(segment.path);
                     String text;
                     try {
-                        text = SenseVoiceAsr.transcribeWav(context, wav);
+                        // 长段（>30s）分窗口转写再合并
+                        int durationSec = (int)(segment.durationMs / 1000);
+                        if (durationSec > 30) {
+                            text = transcribeLongWav(context, wav, durationSec);
+                        } else {
+                            text = SenseVoiceAsr.transcribeWav(context, wav);
+                        }
                     } catch (Throwable svError) {
-                        // SenseVoice 失败（OOM/模型损坏）→ 降级到 Gemma
                         Log.w(TAG, "SenseVoice 失败，降级 Gemma: " + svError.getMessage());
                         if (progress != null) progress.onState("SenseVoice 降级，用 Gemma…");
                         text = engine.transcribe(context, wav, progress);
@@ -363,4 +369,49 @@ public final class Pipeline {
                     calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE));
         }
     }
+
+    /** 解析 Gemma 语义切分的 JSON 数组，返回每个话题的 content */
+    private static List<String> parseTopics(String json) {
+        List<String> result = new ArrayList<>();
+        try {
+            com.google.gson.JsonArray arr = com.google.gson.JsonParser.parseString(json).getAsJsonArray();
+            for (com.google.gson.JsonElement e : arr) {
+                com.google.gson.JsonObject obj = e.getAsJsonObject();
+                String content = obj.has("content") ? obj.get("content").getAsString() : "";
+                if (!content.isEmpty()) result.add(content);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "parseTopics failed", e);
+        }
+        return result;
+    }
+
+    /** 长录音分窗口转写：每 25s 一个窗口，合并结果 */
+    private static String transcribeLongWav(Context context, File wavFile, int durationSec) throws Exception {
+        byte[] bytes = java.nio.file.Files.readAllBytes(wavFile.toPath());
+        int headerSize = 44;
+        int totalSamples = (bytes.length - headerSize) / 2;
+        int windowSamples = 25 * 16000;
+        StringBuilder merged = new StringBuilder();
+        int offset = 0;
+        while (offset < totalSamples) {
+            int end = Math.min(offset + windowSamples, totalSamples);
+            int windowLen = end - offset;
+            short[] window = new short[windowLen];
+            for (int i = 0; i < windowLen; i++) {
+                int byteIdx = headerSize + (offset + i) * 2;
+                if (byteIdx + 1 < bytes.length) {
+                    window[i] = (short) ((bytes[byteIdx + 1] << 8) | (bytes[byteIdx] & 0xFF));
+                }
+            }
+            String part = SenseVoiceAsr.transcribe(context, window, windowLen);
+            if (part != null && !part.trim().isEmpty()) {
+                if (merged.length() > 0) merged.append(' ');
+                merged.append(part.trim());
+            }
+            offset = end;
+        }
+        return merged.toString();
+    }
+
 }
