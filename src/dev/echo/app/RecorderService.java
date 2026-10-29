@@ -149,6 +149,8 @@ public final class RecorderService extends Service implements Vad.Sink {
     private static final long QUIET_SKIP_ALL_MS = 10 * 60_000;    // 10 分钟极静 → 连 RMS 都跳，只等声音恢复
     private static final double STANDBY_RMS_THRESHOLD = 500.0;    // RMS 超过此值 → 有声音，立即唤醒
     private long lastSpeechAtMs = System.currentTimeMillis();
+    private long lastSegmentEndAtMs = 0;
+    private static final long MERGE_GAP_MS = 3000; // 间隔 <3s 的段合并
 
     private static boolean batchRmsExceeds(short[] buf, int len, double threshold) {
         if (len <= 0) return false;
@@ -264,6 +266,13 @@ public final class RecorderService extends Service implements Vad.Sink {
     }
 
     public void onSegment(short[] samples, int length, long startedAtMs) {
+        // 段间隔追踪（VAD 关段阈值 2.5s 已足够长，这里只做日志）
+        long gap = lastSegmentEndAtMs > 0 ? startedAtMs - lastSegmentEndAtMs : -1;
+        if (gap > 0 && gap < MERGE_GAP_MS) {
+            Log.d(TAG, "段间隔 " + gap + "ms（VAD 已通过 2.5s 静默判定为自然停顿）");
+        }
+        lastSegmentEndAtMs = startedAtMs + (long) length / Vad.SAMPLE_RATE * 1000;
+
         File dir = new File(getFilesDir(), "segments");
         if (!dir.isDirectory() && !dir.mkdirs()) Log.w(TAG, "mkdir failed");
         File wav = new File(dir, java.util.UUID.randomUUID() + ".wav");

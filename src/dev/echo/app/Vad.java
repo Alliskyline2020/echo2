@@ -15,9 +15,16 @@ public final class Vad {
 
     private static final int PREROLL_FRAMES = 10;
     private static final int MIN_SPEECH_FRAMES = 50;   // 1 秒有效语音才开段
-    private static final int END_SILENCE_FRAMES = 40;   // 800ms 静默关闭
-    private static final int MIN_SEGMENT_FRAMES = 100; // 段最短 2 秒才输出
+    private static final int END_SILENCE_FRAMES = 125;  // 2.5 秒静默才关闭（自然停顿~1s 不切段）
+    private static final int MIN_SEGMENT_FRAMES = 150;  // 段最短 3 秒才输出
     private static final int MAX_SEGMENT_FRAMES = SAMPLE_RATE / FRAME_SAMPLES * 30;
+
+    // 设计意图：
+    //   开段 1s 连续语音 → 过滤咳嗽/门响
+    //   关段 2.5s 静默 → 自然停顿(~1s)/思考(~1.5s) 不切段，只在真正话题结束时切
+    //   最短 3s → 太短的段（一两个字）不值得转写
+    //   上限 30s → 太长的段影响 SenseVoice 转写精度，超时强制切
+    // 效果：一句完整的话 + 前后停顿 = 1 个段，而不是每个停顿一个段
 
     private float noiseFloorDb = MIN_SPEECH_DB;
 
