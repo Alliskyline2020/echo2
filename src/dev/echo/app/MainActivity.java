@@ -539,6 +539,35 @@ public class MainActivity extends Activity implements RecorderService.Listener {
         homeBody.addView(spacer(16));
         homeBody.addView(Ui.sectionLabel(this, "今天做了什么"));
         homeBody.addView(spacer(6));
+        
+        // 日期选择条
+        LinearLayout dateBar = new LinearLayout(this);
+        dateBar.setOrientation(LinearLayout.HORIZONTAL);
+        dateBar.setPadding(0, 0, 0, dp(4));
+        SimpleDateFormat dayFmt = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+        String todayKey = dayFmt.format(new Date());
+        Calendar cal = Calendar.getInstance();
+        String[] labels = {"今天", "昨天", "前天"};
+        for (int di = 0; di < labels.length; di++) {
+            Calendar c = (Calendar) cal.clone();
+            c.add(Calendar.DAY_OF_YEAR, -di);
+            String dk = dayFmt.format(c.getTime());
+            boolean has = false;
+            for (Model.ActivityBlock b : store.activities()) {
+                if (dayFmt.format(new Date(b.startTime)).equals(dk)) { has = true; break; }
+            }
+            boolean sel = di == 0; // 简化：只选今天
+            TextView chip = Ui.text(MainActivity.this, labels[di],
+                    sel ? PRIMARY : has ? TEXT_HI : TEXT_LOW, Ui.Size.CAP, sel);
+            chip.setPadding(dp(14), dp(6), dp(14), dp(6));
+            chip.setBackground(Ui.pill(MainActivity.this, dp(14),
+                    sel ? PRIMARY_SOFT : Color.TRANSPARENT));
+            dateBar.addView(chip);
+            if (di < labels.length - 1) dateBar.addView(spacer(4));
+        }
+        homeBody.addView(dateBar);
+        homeBody.addView(spacer(6));
+        
         List<Model.ActivityBlock> activities = store.activities();
         if (activities.isEmpty()) {
             homeBody.addView(emptyCard("正在聆听",
