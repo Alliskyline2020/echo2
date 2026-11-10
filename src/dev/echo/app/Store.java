@@ -37,6 +37,7 @@ public final class Store {
     private List<Model.Session> sessions;
     private List<Model.Todo> todos;
     private List<Model.MemoryItem> memories;
+    private List<Model.Person> people;
     private List<Model.ActivityBlock> activities;
     private Model.Settings settings;
     private final java.util.Map<String, String> digests;
@@ -67,6 +68,7 @@ public final class Store {
         todos = read("todos.json", new TypeToken<List<Model.Todo>>() { }.getType());
         memories = read("memories.json", new TypeToken<List<Model.MemoryItem>>() { }.getType());
         activities = read("activities.json", new TypeToken<List<Model.ActivityBlock>>() { }.getType());
+        people = read("people.json", new TypeToken<List<Model.Person>>() { }.getType());
         // 自愈迁移：删除旧格式活动（没有 title 字段的是旧版生成的）
         if (activities != null) {
             boolean changed = activities.removeIf(a -> a.title == null || a.title.isEmpty());
@@ -302,10 +304,34 @@ public final class Store {
         return new ArrayList<>(activities);
     }
 
+
+    public synchronized void upsertPerson(Model.Person person) {
+        for (int i = 0; i < people.size(); i++) {
+            if (people.get(i).name.equals(person.name)) {
+                person.mentionCount = people.get(i).mentionCount + 1;
+                person.lastSeenAt = System.currentTimeMillis();
+                people.set(i, person);
+                write("people.json", people);
+                return;
+            }
+        }
+        person.mentionCount = 1;
+        person.createdAt = System.currentTimeMillis();
+        person.lastSeenAt = person.createdAt;
+        people.add(person);
+        write("people.json", people);
+    }
+
     public synchronized void addActivity(Model.ActivityBlock block) {
         activities.add(block);
         write("activities.json", activities);
     }
+
+    public synchronized List<Model.Person> people() {
+        return new ArrayList<>(people);
+    }
+
+
 
 public synchronized void addMemory(Model.MemoryItem item) {
         memories.add(item);

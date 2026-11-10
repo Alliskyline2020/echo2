@@ -103,9 +103,44 @@ public final class Model {
         /** 复核时间；到期后提示用户确认是否仍成立 */
         public long reviewAt;
 
+        /** 用户置顶（重要的记忆不被时间线淹没） */
+        public boolean pinned;
+        /** 用户收藏 */
+        public boolean favorite;
+        /** 来源：conversation（对话提取）/ inference（推理得出）/ manual（手动录入） */
+        public String source = "conversation";
+        /** 位置标签（在家里/公司/路上说的） */
+        public String locationLabel = "";
+        /** 关联的人物 JSON：[{"name":"李四","relation":"同事"}] */
+        public String personAnnotations = "[]";
+        /** 源转写段 ID 列表（JSON 数组，溯源用） */
+        public String sourceTranscriptIds = "[]";
+        /** AI 判断是否值得记 */
+        public boolean worthNote = true;
+
         public String title() {
             return subject + "：" + value;
         }
+    }
+
+    /** 提取到的人物 */
+    public static final class Person {
+        public String id;
+        public String name;
+        /** 关系：同事/朋友/家人/客户/邻居/老师等 */
+        public String relation = "";
+        /** 被提到的次数 */
+        public int mentionCount;
+        /** 重要度 0-1 */
+        public float importance;
+        public boolean pinned;
+        /** 分类标签 */
+        public String category = "";
+        public String note = "";
+        /** 最近一次提到的场景 */
+        public String context = "";
+        public long createdAt;
+        public long lastSeenAt;
     }
 
     /** 模型抽取出的结构化结果 */
