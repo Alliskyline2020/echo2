@@ -225,19 +225,7 @@ public final class Pipeline {
                 // [对方] 前缀是有用信号，保留
                 if (task.isEmpty()) continue;
                 if (store.findTodoByTask(task) != null) continue;
-                // 黑名单：语音助手的提示语/系统播报不是用户的待办
-                if (task.contains("逐字转写") || task.contains("这段音频")
-                        || task.contains("转写这段") || task.contains("识别结果")) continue;
-                // 分类纠错：既没时间也没动作动词的不是待办，跳过
-                if (timeText == null || timeText.trim().isEmpty()) {
-                    boolean hasAction = false;
-                    for (String verb : new String[]{"打", "发", "交", "买", "去", "做", "写", "回",
-                            "叫", "问", "约", "取", "寄", "订", "审", "看", "汇报", "整理", "准备",
-                            "完成", "提交", "联系", "确认", "安排", "提醒"}) {
-                        if (task.contains(verb)) { hasAction = true; break; }
-                    }
-                    if (!hasAction) continue;
-                }
+                // Gemma prompt 已做准入筛选，这里只做安全检查
                 Model.Todo todo = new Model.Todo();
                 todo.id = UUID.randomUUID().toString();
                 todo.task = task;
@@ -273,12 +261,7 @@ public final class Pipeline {
                         ? firstString(memoryObject, "kind") : "fact";
                 String subject = memoryObject != null ? firstString(memoryObject, "subject") : textValue;
                 String value = memoryObject != null ? firstString(memoryObject, "value") : null;
-                // 素材黑名单：语音助手提示语/系统交互不进素材库
-                if ("material".equals(kind)) {
-                    String check = (subject == null ? "" : subject) + (value == null ? "" : value);
-                    if (check.contains("转写") || check.contains("识别") || check.contains("提示")
-                            || check.contains("询问主人") || check.contains("音频")) continue;
-                }
+                // 素材准入由 Gemma prompt 筛选，代码不再做关键词过滤
                 if (subject == null || subject.trim().isEmpty()) continue;
                 subject = subject.trim().replace(" ", "");
                 if (value == null || value.trim().isEmpty()) value = textValue == null ? "" : textValue.trim();
@@ -469,9 +452,7 @@ public final class Pipeline {
                 description = raw;
             }
             if (title.isEmpty() && description.isEmpty()) return;
-            // 噪声标题兜底过滤
-            if (title.contains("环境") || title.contains("背景") || title.contains("播客")
-                    || title.contains("电视") || description.contains("背景播放")) return;
+            // 噪声过滤由 Gemma skip 标记处理
 
             Model.Session session = null;
             for (Model.Session s : store.sessions()) {
