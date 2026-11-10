@@ -217,12 +217,19 @@ public final class GemmaEngine {
     public synchronized String activitySummary(Context context, String transcript, Progress progress) throws Exception {
         ensureReady(context, progress);
         if (progress != null) progress.onState("正在总结…");
-        String prompt = "你是中文助手。只输出 JSON，禁止 markdown 代码块。\n"
-                + "根据下面的转写内容，生成一个活动摘要：\n"
+        String prompt = "你是中文助手。只输出 JSON，禁止 markdown 代码块。必须使用简体中文。\n"
+                + "根据下面的转写内容，判断并生成活动摘要：\n"
+                + "\n第一步——先判断内容类型：\n"
+                + "如果内容属于以下任何一种，返回 {\"skip\":true}，不要生成摘要：\n"
+                + "- 环境声响（脚步、扶梯、关门、咳嗽等非语音）\n"
+                + "- 背景播放（电视、播客、视频、音乐等单向输出，不是和主人对话）\n"
+                + "- 语音助手提示语或系统播报\n"
+                + "- 无法理解或没有实际内容的碎片\n"
+                + "- 和主人无关的他人对话（主人没有参与）\n"
+                + "\n第二步——如果是主人参与的对话或独白，生成：\n"
                 + "{\"title\":\"短标题（4-8个字，如：装修讨论、项目会议、整理厨房）\","
                 + "\"description\":\"一句话描述做了什么、关键决定或结论（30-60字）\"}\n"
-                + "如果内容是环境噪声（电视、播客等非对话），title 填\"环境音\"，description 填\"背景播放内容\"。\n"
-                + "必须使用简体中文。\n\n转写内容：\n" + transcript;
+                + "\n只输出 JSON。\n\n转写内容：\n" + transcript;
         Message message = new Message(
                 Role.USER,
                 Contents.Companion.of(new Content.Text(prompt)),

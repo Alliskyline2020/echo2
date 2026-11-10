@@ -162,7 +162,14 @@ public final class Pipeline {
                     }
                     // 无论抽取成败，活动摘要都生成
                     try {
-                        generateActivitySummary(context, store, session.id, briefing, todoCount);
+                        // 用这个 session 里最早段的开始时间和最晚段的结束时间
+                        long segStart = session.startedAt;
+                        long segEnd = session.startedAt;
+                        for (Model.Segment seg : session.segments) {
+                            segStart = Math.min(segStart, seg.startedAt);
+                            segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                        }
+                        generateActivitySummary(context, store, session.id, briefing, todoCount, segStart, segEnd);
                     } catch (Throwable summaryError) {
                         Log.w(TAG, "活动摘要失败: " + summaryError.getMessage());
                     }
@@ -436,7 +443,8 @@ public final class Pipeline {
 
     /** 生成活动摘要：用户唯一看到的展示单位（录音/转写完全不可见） */
     private static void generateActivitySummary(Context context, Store store,
-            String sessionId, String transcript, int todoCount) {
+            String sessionId, String transcript, int todoCount,
+            long segmentStartAt, long segmentEndAt) {
         try {
             GemmaEngine engine = GemmaEngine.get();
             engine.ensureReady(context, null);
@@ -445,18 +453,25 @@ public final class Pipeline {
             // 清洗 markdown
             raw = raw.replace("```json", "").replace("```", "").trim();
             
-            // 解析 {"title":"...","description":"..."}
+            // 解析 {"skip":true} 或 {"title":"...","description":"..."}
             String title = "";
             String description = "";
             try {
                 com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+                // 噪声/无关内容 → 不生成活动块
+                if (obj.has("skip") && obj.get("skip").getAsBoolean()) {
+                    Log.i(TAG, "内容为噪声/无关，跳过活动摘要");
+                    return;
+                }
                 title = obj.has("title") ? obj.get("title").getAsString() : "";
                 description = obj.has("description") ? obj.get("description").getAsString() : "";
             } catch (Throwable parseError) {
-                // JSON 解析失败，把 raw 当 description 用
                 description = raw;
             }
             if (title.isEmpty() && description.isEmpty()) return;
+            // 噪声标题兜底过滤
+            if (title.contains("环境") || title.contains("背景") || title.contains("播客")
+                    || title.contains("电视") || description.contains("背景播放")) return;
 
             Model.Session session = null;
             for (Model.Session s : store.sessions()) {
@@ -466,8 +481,8 @@ public final class Pipeline {
 
             Model.ActivityBlock block = new Model.ActivityBlock();
             block.id = java.util.UUID.randomUUID().toString();
-            block.startTime = session.startedAt;
-            block.endTime = System.currentTimeMillis();
+            block.startTime = segmentStartAt;
+            block.endTime = segmentEndAt;
             block.title = title;
             block.summary = description;
             block.transcript = transcript != null && transcript.length() > 500
