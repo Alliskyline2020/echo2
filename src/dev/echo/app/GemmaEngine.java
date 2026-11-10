@@ -41,7 +41,17 @@ public final class GemmaEngine {
     private String backendName = "cpu";
 
     /** 进程级单例：2.4GB 模型只加载一份，服务和界面共用 */
-    public static synchronized GemmaEngine get() {
+    
+    // ── prompt 外置：从 assets/prompts/ 加载 ──
+    private static String loadPrompt(android.content.Context context, String name) {
+        try {
+            java.io.InputStream is = context.getAssets().open("prompts/" + name + ".txt");
+            java.util.Scanner scanner = new java.util.Scanner(is, "UTF-8").useDelimiter("\\A");
+            return scanner.hasNext() ? scanner.next() : null;
+        } catch (Throwable e) { return null; }
+    }
+
+public static synchronized GemmaEngine get() {
         if (shared == null) shared = new GemmaEngine();
         return shared;
     }
@@ -171,6 +181,58 @@ public final class GemmaEngine {
                 Collections.emptyList(),
                 Collections.emptyMap());
         return send(message, 1024);
+    }
+
+    /**
+     * 独立提取记忆（不与待办混合）。
+     * 只输出 memories 数组，准入标准独立控制。
+     */
+    public synchronized String extractMemories(Context context, String transcript, Progress progress) throws Exception {
+        ensureReady(context, progress);
+        if (progress != null) progress.onState("正在沉淀记忆…");
+        String prompt = loadPrompt(context, "extract_memories");
+        if (prompt == null) prompt = "你是中文助手。从转写中提取关于主人的长期记忆。只输出JSON数组。";
+        prompt = prompt + "\n" + transcript;
+        Message message = new Message(
+                Role.USER,
+                Contents.Companion.of(new Content.Text(prompt)),
+                Collections.emptyList(),
+                Collections.emptyMap());
+        return send(message, 512);
+    }
+
+    /**
+     * 会议边界检测：按话题语义切分长转写。
+     */
+    public synchronized String detectMeetingBoundaries(Context context, String transcript, Progress progress) throws Exception {
+        ensureReady(context, progress);
+        if (progress != null) progress.onState("正在检测活动边界…");
+        String prompt = loadPrompt(context, "meeting_boundary_sentinel");
+        if (prompt == null) prompt = "你是中文助手。按话题边界切分转写，输出JSON数组。";
+        prompt = prompt + "\n" + transcript;
+        Message message = new Message(
+                Role.USER,
+                Contents.Companion.of(new Content.Text(prompt)),
+                Collections.emptyList(),
+                Collections.emptyMap());
+        return send(message, 1024);
+    }
+
+    /**
+     * 提取人物：识别转写中提到的人名、关系、场景。
+     */
+    public synchronized String extractPeople(Context context, String transcript, Progress progress) throws Exception {
+        ensureReady(context, progress);
+        if (progress != null) progress.onState("正在识别人物…");
+        String prompt = loadPrompt(context, "extract_people");
+        if (prompt == null) prompt = "你是中文助手。提取转写中提到的人名，输出JSON数组。";
+        prompt = prompt + "\n" + transcript;
+        Message message = new Message(
+                Role.USER,
+                Contents.Companion.of(new Content.Text(prompt)),
+                Collections.emptyList(),
+                Collections.emptyMap());
+        return send(message, 256);
     }
 
     /**
