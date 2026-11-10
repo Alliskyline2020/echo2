@@ -30,6 +30,7 @@ public final class SpeakerId {
     private static SpeakerEmbeddingExtractor extractor;
     private static SpeakerEmbeddingManager manager;
     private static float[] centroid;
+    private static final java.util.Map<String, float[]> namedSpeakers = new java.util.LinkedHashMap<>();
 
     private SpeakerId() {
     }
@@ -69,6 +70,7 @@ public final class SpeakerId {
                 for (int i = 0; i < parts.length; i++) centroid[i] = Float.parseFloat(parts[i]);
                 manager.add("owner", centroid);
                 Log.i(TAG, "声纹已恢复 dim=" + centroid.length);
+                restoreNamedSpeakers(context);
             } catch (Throwable error) {
                 Log.w(TAG, "声纹恢复失败: " + error);
             }
@@ -110,15 +112,18 @@ public final class SpeakerId {
             if (!enrolled(context)) return "unknown";
             if (length < 16000 * 1.5) return "unknown"; // 短于 1.5 秒不可靠
             float[] vector = embed(context, samples, length);
-            double dot = 0, na = 0, nb = 0;
-            for (int i = 0; i < vector.length; i++) {
-                dot += vector[i] * centroid[i];
-                na += (double) vector[i] * vector[i];
-                nb += (double) centroid[i] * centroid[i];
+            float ownerSim = cosine(vector, centroid);
+            Log.i(TAG, "声纹 owner 相似度=" + String.format(java.util.Locale.US, "%.3f", ownerSim));
+            if (ownerSim >= OWNER_THRESHOLD) return "owner";
+            // 遍历已注册的家人/团队成员
+            for (java.util.Map.Entry<String, float[]> entry : namedSpeakers.entrySet()) {
+                float sim = cosine(vector, entry.getValue());
+                if (sim >= OWNER_THRESHOLD) {
+                    Log.i(TAG, "匹配到 " + entry.getKey() + " 相似度=" + String.format(java.util.Locale.US, "%.3f", sim));
+                    return entry.getKey();
+                }
             }
-            float similarity = (float) (dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-9));
-            Log.i(TAG, "声纹相似度=" + String.format(java.util.Locale.US, "%.3f", similarity));
-            return similarity >= OWNER_THRESHOLD ? "owner" : "other";
+            return "other";
         } catch (Throwable error) {
             Log.w(TAG, "声纹判定失败: " + error);
             return "unknown";
@@ -251,4 +256,64 @@ public final class SpeakerId {
         for (int i = 0; i < n; i++) pcm[i] = samples[i] / 32768f;
         return pcm;
     }
+    private static float cosine(float[] a, float[] b) {
+        double dot = 0, na = 0, nb = 0;
+        for (int i = 0; i < a.length && i < b.length; i++) {
+            dot += a[i] * b[i];
+            na += (double) a[i] * a[i];
+            nb += (double) b[i] * b[i];
+        }
+        return (float) (dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-9));
+    }
+
+    /** 注册一个新说话人（录入声纹后调用） */
+    public static void registerSpeaker(Context context, String name, float[] vector) {
+        namedSpeakers.put(name, vector);
+        try {
+            org.json.JSONObject speakers = new org.json.JSONObject();
+            File sf = new File(context.getFilesDir(), "data/speakers.json");
+            if (sf.isFile()) {
+                try {
+                    speakers = new org.json.JSONObject(
+                            new String(java.nio.file.Files.readAllBytes(sf.toPath()),
+                                    java.nio.charset.StandardCharsets.UTF_8));
+                } catch (Throwable ignored) { }
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < vector.length; i++) {
+                if (i > 0) sb.append(",");
+                sb.append(vector[i]);
+            }
+            speakers.put(name, sb.toString());
+            sf.getParentFile().mkdirs();
+            java.nio.file.Files.write(sf.toPath(),
+                    speakers.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            Log.i(TAG, "说话人已注册: " + name);
+        } catch (Throwable e) {
+            Log.w(TAG, "save speaker failed", e);
+        }
+    }
+
+    /** 启动时恢复已注册的家人声纹 */
+    private static void restoreNamedSpeakers(Context context) {
+        try {
+            File sf = new File(context.getFilesDir(), "data/speakers.json");
+            if (!sf.isFile()) return;
+            org.json.JSONObject speakers = new org.json.JSONObject(
+                    new String(java.nio.file.Files.readAllBytes(sf.toPath()),
+                            java.nio.charset.StandardCharsets.UTF_8));
+            java.util.Iterator<String> keys = speakers.keys();
+            while (keys.hasNext()) {
+                String name = keys.next();
+                String[] parts = speakers.getString(name).split(",");
+                float[] vec = new float[parts.length];
+                for (int i = 0; i < parts.length; i++) vec[i] = Float.parseFloat(parts[i]);
+                namedSpeakers.put(name, vec);
+            }
+            Log.i(TAG, "恢复了 " + namedSpeakers.size() + " 个家人声纹");
+        } catch (Throwable e) {
+            Log.w(TAG, "restore speakers failed", e);
+        }
+    }
+
 }
