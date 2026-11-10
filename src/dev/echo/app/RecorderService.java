@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
+import com.k2fsa.sherpa.onnx.SpeechSegment;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -46,7 +47,8 @@ public final class RecorderService extends Service implements Vad.Sink {
     private volatile boolean running = false;
     private volatile boolean syncing = false;
 
-    private final Vad vad = new Vad();
+    private final Vad vad = new Vad(); // 降级用
+    private SileroVad sileroVad;
     private Store store;
     private GemmaEngine engine;
     private String sessionId;
@@ -136,6 +138,10 @@ public final class RecorderService extends Service implements Vad.Sink {
         running = true;
         recording = true;
         vad.reset();
+        if (sileroVad == null) {
+            sileroVad = new SileroVad();
+            if (!sileroVad.init(this)) sileroVad = null; // 模型不存在则降级
+        }
         sessionId = store.startSession().id;
         startForeground(NOTIFICATION_ID, buildNotification("正在记录"));
         setStatus("正在记录");
@@ -198,16 +204,37 @@ public final class RecorderService extends Service implements Vad.Sink {
             int frames = read / Vad.FRAME_SAMPLES;
             for (int f = 0; f < frames && running; f++) {
                 System.arraycopy(batch, f * Vad.FRAME_SAMPLES, frame, 0, Vad.FRAME_SAMPLES);
-                try {
-                    vad.push(frame, now - (frames - 1 - f) * 20L, this);
-                } catch (Throwable error) {
-                    Log.w(TAG, "vad failed", error);
+                if (sileroVad != null) {
+                    // Silero VAD：按帧喂入，段落通过回调获取
+                    try {
+                        sileroVad.acceptWaveform(frame, frame.length);
+                    } catch (Throwable error) {
+                        Log.w(TAG, "silero vad failed", error);
+                    }
+                    // 收取 Silero 检测到的语音段
+                    while (sileroVad.hasSegment()) {
+                        SpeechSegment seg = sileroVad.nextSegment();
+                        if (seg != null && seg.getSamples().length > Vad.SAMPLE_RATE) {
+                            // 段长 > 1s
+                            short[] segSamples = new short[seg.getSamples().length];
+                            for (int i = 0; i < segSamples.length; i++) {
+                                segSamples[i] = (short) (seg.getSamples()[i] * 32768f);
+                            }
+                            long segStart = now - (long) segSamples.length / Vad.SAMPLE_RATE * 1000;
+                            onSegment(segSamples, segSamples.length, segStart);
+                        }
+                    }
+                    if (sileroVad.isSpeechDetected()) lastSpeechAtMs = now;
+                } else {
+                    // 降级：手写 RMS+ZCR VAD
+                    try {
+                        vad.push(frame, now - (frames - 1 - f) * 20L, this);
+                    } catch (Throwable error) {
+                        Log.w(TAG, "vad failed", error);
+                    }
+                    if (vad.isSpeechActive()) lastSpeechAtMs = now;
                 }
                 lastSeenAudioAtMs = now;
-            }
-            // VAD 检测到人声段时更新 lastSpeechAtMs
-            if (vad.isSpeechActive()) {
-                lastSpeechAtMs = now;
             }
         }
         try {
@@ -419,6 +446,7 @@ public final class RecorderService extends Service implements Vad.Sink {
         running = false;
         recording = false;
         vad.reset();
+        if (sileroVad != null) { sileroVad.release(); sileroVad = null; }
         // 等采集线程退出（最多 1s），防止泄漏
         try {
             if (captureThread != null) captureThread.join(1000);
