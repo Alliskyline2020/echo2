@@ -142,36 +142,73 @@ public final class Pipeline {
             if (merged != null && merged.length() > 0) {
                 if (progress != null) progress.onState("正在提取待办和记忆…");
                 try {
-                    // Gemma E2B 上下文 2048 token：转写太长会直接 INVALID_ARGUMENT。
-                    // 保留最近的 2400 字符（约 1900 token），prompt 模板和输出留足余量。
+                    // 分块抽取：Gemma E2B 上下文 2048 token，每块 1800 字符（约 1400 token）留余量。
+                    // 块间 200 字符重叠防止跨块句子被切断。
+                    // 每块独立抽取 → 每块的待办/记忆都保留，不再丢弃早期内容。
                     String briefing = merged.toString();
-                    if (briefing.length() > 2400) {
-                        briefing = briefing.substring(briefing.length() - 2400);
-                    }
-                    String raw = engine.extract(context, briefing, progress);
-                    // 清洗 markdown 代码块标记
-                    if (raw != null) {
-                        raw = raw.replace("/* markdown */", "").trim();
-                        raw = raw.replace("\u0060\u0060\u0060json", "").replace("\u0060\u0060\u0060", "").trim();
-                    }
-                    int todoCount = 0;
-                    try {
-                        todoCount = applyExtraction(context, store, session.id, raw);
-                    } catch (Throwable extractError) {
-                        Log.w(TAG, "抽取失败但活动照常生成: " + extractError.getMessage());
-                    }
-                    // 无论抽取成败，活动摘要都生成
-                    try {
-                        // 用这个 session 里最早段的开始时间和最晚段的结束时间
-                        long segStart = session.startedAt;
-                        long segEnd = session.startedAt;
-                        for (Model.Segment seg : session.segments) {
-                            segStart = Math.min(segStart, seg.startedAt);
-                            segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                    int totalTodos = 0;
+                    
+                    if (briefing.length() <= 1800) {
+                        // 短文本：直接一次抽取
+                        String raw = engine.extract(context, briefing, progress);
+                        raw = cleanMarkdown(raw);
+                        try {
+                            totalTodos = applyExtraction(context, store, session.id, raw);
+                        } catch (Throwable extractError) {
+                            Log.w(TAG, "抽取失败但活动照常生成: " + extractError.getMessage());
                         }
-                        generateActivitySummary(context, store, session.id, briefing, todoCount, segStart, segEnd);
-                    } catch (Throwable summaryError) {
-                        Log.w(TAG, "活动摘要失败: " + summaryError.getMessage());
+                        // 活动摘要用全文生成
+                        try {
+                            long segStart = session.startedAt;
+                            long segEnd = session.startedAt;
+                            for (Model.Segment seg : session.segments) {
+                                segStart = Math.min(segStart, seg.startedAt);
+                                segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                            }
+                            generateActivitySummary(context, store, session.id, briefing, totalTodos, segStart, segEnd);
+                        } catch (Throwable summaryError) {
+                            Log.w(TAG, "活动摘要失败: " + summaryError.getMessage());
+                        }
+                    } else {
+                        // 长文本：分块抽取
+                        List<String> chunks = splitWithOverlap(briefing, 1800, 200);
+                        Log.i(TAG, "长文本 " + briefing.length() + " 字 → " + chunks.size() + " 块抽取");
+                        
+                        StringBuilder allSummaries = new StringBuilder();
+                        for (int ci = 0; ci < chunks.size(); ci++) {
+                            String chunk = chunks.get(ci);
+                            if (progress != null) progress.onState("正在提取 " + (ci + 1) + "/" + chunks.size() + " 块…");
+                            try {
+                                String raw = engine.extract(context, chunk, progress);
+                                raw = cleanMarkdown(raw);
+                                int count = applyExtraction(context, store, session.id, raw);
+                                totalTodos += count;
+                                // 收集每块的 summary 用于活动摘要
+                                String blockSummary = extractSummaryField(raw);
+                                if (!blockSummary.isEmpty()) {
+                                    if (allSummaries.length() > 0) allSummaries.append("；");
+                                    allSummaries.append(blockSummary);
+                                }
+                            } catch (Throwable chunkError) {
+                                Log.w(TAG, "块 " + ci + " 抽取失败，继续下一块: " + chunkError.getMessage());
+                            }
+                        }
+                        
+                        // 活动摘要用所有块的 summary 合并生成
+                        try {
+                            long segStart = session.startedAt;
+                            long segEnd = session.startedAt;
+                            for (Model.Segment seg : session.segments) {
+                                segStart = Math.min(segStart, seg.startedAt);
+                                segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                            }
+                            String summaryInput = allSummaries.length() > 0
+                                    ? "多个话题的概要：" + allSummaries
+                                    : briefing.substring(Math.max(0, briefing.length() - 800));
+                            generateActivitySummary(context, store, session.id, summaryInput, totalTodos, segStart, segEnd);
+                        } catch (Throwable summaryError) {
+                            Log.w(TAG, "活动摘要失败: " + summaryError.getMessage());
+                        }
                     }
                 } catch (Throwable error) {
                     Log.w(TAG, "extract failed", error);
@@ -318,6 +355,7 @@ public final class Pipeline {
 
     /** 从第一个 { 起做括号深度扫描（跳过字符串字面量），返回第一个完整 JSON 对象 */
     static String extractJsonObject(String text) {
+        if (text == null || text.isEmpty()) return null;
         int start = text.indexOf('{');
         if (start < 0) return null;
         int depth = 0;
@@ -476,6 +514,46 @@ public final class Pipeline {
             Log.i(TAG, "活动摘要：" + block.summary);
         } catch (Throwable error) {
             Log.w(TAG, "activity summary failed", error);
+        }
+    }
+
+    /** 清洗 markdown 代码块标记 */
+    private static String cleanMarkdown(String raw) {
+        if (raw == null) return null;
+        return raw.replace("/* markdown */", "").trim()
+                .replace("\u0060\u0060\u0060json", "").replace("\u0060\u0060\u0060", "").trim();
+    }
+
+    /** 分块并加重叠：每块 chunkSize 字符，块间 overlapSize 字符重叠 */
+    private static List<String> splitWithOverlap(String text, int chunkSize, int overlapSize) {
+        List<String> chunks = new ArrayList<>();
+        int start = 0;
+        while (start < text.length()) {
+            int end = Math.min(start + chunkSize, text.length());
+            int searchStart = Math.max(start, end - 200);
+            for (int i = end - 1; i >= searchStart; i--) {
+                char c = text.charAt(i);
+                if (c == '。' || c == '？' || c == '！' || c == '\n') {
+                    end = i + 1;
+                    break;
+                }
+            }
+            chunks.add(text.substring(start, end));
+            start = end - overlapSize;
+            if (start <= 0) start = end;
+            if (start >= text.length()) break;
+        }
+        return chunks;
+    }
+
+    /** 从抽取 JSON 中提取 summary 字段 */
+    private static String extractSummaryField(String raw) {
+        if (raw == null) return "";
+        try {
+            com.google.gson.JsonObject obj = com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+            return obj.has("summary") ? obj.get("summary").getAsString() : "";
+        } catch (Throwable e) {
+            return "";
         }
     }
 

@@ -18,7 +18,8 @@ public final class TimeCn {
         if (raw == null || raw.isEmpty()) return 0;
         String text = raw.trim()
                 .replace(" ", "").replace("礼拜", "周")
-                .replace("早上", "上午").replace("傍晚", "晚上");
+                .replace("早上", "上午").replace("傍晚", "晚上")
+                .replace("一个", "1");
         // 「下午三点」→「下午3点」：钟点里的中文数字先归一化，后面的正则只认阿拉伯数字
         java.util.regex.Matcher cnClock = java.util.regex.Pattern
                 .compile("([一二两三四五六七八九十]{1,3})点").matcher(text);
@@ -53,7 +54,41 @@ public final class TimeCn {
 
         boolean hasDay = dayShift >= 0;
         if (!hasDay) {
-            // 周X / 下周X
+            // 中文数字→阿拉伯（从长到短替换，防止子串误匹配）
+        text = text.replace("十月", "10月").replace("十一月", "11月").replace("十二月", "12月")
+                .replace("一月", "1月").replace("二月", "2月").replace("三月", "3月")
+                .replace("四月", "4月").replace("五月", "5月").replace("六月", "6月")
+                .replace("七月", "7月").replace("八月", "8月").replace("九月", "9月");
+        text = text.replace("二十六", "26").replace("二十七", "27").replace("二十八", "28")
+                .replace("二十九", "29").replace("二十一", "21").replace("二十二", "22")
+                .replace("二十三", "23").replace("二十四", "24").replace("二十五", "25")
+                .replace("三十一", "31").replace("三十", "30").replace("二十", "20")
+                .replace("十一", "11").replace("十二", "12").replace("十三", "13")
+                .replace("十四", "14").replace("十五", "15").replace("十六", "16")
+                .replace("十七", "17").replace("十八", "18").replace("十九", "19");
+        text = text.replace("一号", "1号").replace("二号", "2号").replace("三号", "3号")
+                .replace("四号", "4号").replace("五号", "5号").replace("六号", "6号")
+                .replace("七号", "7号").replace("八号", "8号").replace("九号", "9号")
+                .replace("十号", "10号");
+
+        // X月X号 / X月X日
+        java.util.regex.Matcher monthDay = java.util.regex.Pattern
+                .compile("(\\d{1,2})月(\\d{1,2})[号日]")
+                .matcher(text);
+        if (monthDay.find()) {
+            int month = Integer.parseInt(monthDay.group(1));
+            int day = Integer.parseInt(monthDay.group(2));
+            java.util.Calendar target = java.util.Calendar.getInstance();
+            target.setTimeInMillis(now);
+            target.set(java.util.Calendar.MONTH, month - 1);
+            target.set(java.util.Calendar.DAY_OF_MONTH, day);
+            target.set(java.util.Calendar.HOUR_OF_DAY, 10);
+            target.set(java.util.Calendar.MINUTE, 0);
+            if (target.getTimeInMillis() < now) target.add(java.util.Calendar.YEAR, 1);
+            return target.getTimeInMillis();
+        }
+
+        // 周X / 下周X
             java.util.regex.Matcher week = java.util.regex.Pattern
                     .compile("(下下周?|下?)周([一二三四五六日天])").matcher(text);
             if (week.find()) {
