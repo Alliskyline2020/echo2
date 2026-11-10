@@ -493,6 +493,13 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             LinearLayout.LayoutParams stopParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
             panel.addView(stop, stopParams);
+            // 立即整理按钮（不等攒批触发）
+            Button syncNowBtn = Ui.outlineButton(this, "立即整理", TEXT_MID);
+            syncNowBtn.setOnClickListener(v -> syncNow());
+            LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            syncParams.setMargins(0, dp(8), 0, 0);
+            panel.addView(syncNowBtn, syncParams);
         } else {
             // 精简：按钮即入口，不需要装饰性行
             recordButton = Ui.primaryButton(this, "●  开始记录");

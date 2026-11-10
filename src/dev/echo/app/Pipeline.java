@@ -146,6 +146,20 @@ public final class Pipeline {
                     // 块间 200 字符重叠防止跨块句子被切断。
                     // 每块独立抽取 → 每块的待办/记忆都保留，不再丢弃早期内容。
                     String briefing = merged.toString();
+                    
+                    // 注入 pinned 记忆作为抽取上下文（让 Gemma 知道用户已知信息，避免冲突）
+                    StringBuilder pinnedContext = new StringBuilder();
+                    for (Model.MemoryItem mem : store.memories()) {
+                        if (mem.pinned && "active".equals(mem.status)) {
+                            pinnedContext.append("已知：").append(mem.subject)
+                                    .append(" = ").append(mem.value).append("\n");
+                        }
+                    }
+                    if (pinnedContext.length() > 0) {
+                        briefing = "以下是已知的用户信息（提取待办时参考，避免冲突）：\n"
+                                + pinnedContext + "\n\n" + briefing;
+                    }
+                    
                     int totalTodos = 0;
                     
                     if (briefing.length() <= 1800) {
