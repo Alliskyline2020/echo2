@@ -968,7 +968,7 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             if (!today.isEmpty()) emitTodoGroup(todosBody, "今天 · " + today.size(), today, WARNING);
             if (!tomorrow.isEmpty()) emitTodoGroup(todosBody, "明天 · " + tomorrow.size(), tomorrow, TEXT_HI);
             if (!later.isEmpty()) emitTodoGroup(todosBody, "之后 · " + later.size(), later, TEXT_MID);
-            if (!noDate.isEmpty()) emitTodoGroup(todosBody, "无日期 · " + noDate.size(), noDate, TEXT_LOW);
+            if (!noDate.isEmpty()) emitTodoGroup(todosBody, "待补充时间 · 点击设置提醒", noDate, WARNING);
 
             if (total > 5 && !todosExpanded) {
                 TextView more = Ui.text(this, "展开全部 " + total + " 项  ›", PRIMARY, Ui.Size.SUB, false);
@@ -1071,11 +1071,40 @@ public class MainActivity extends Activity implements RecorderService.Listener {
             row.addView(Ui.chip(this, "高", DANGER_BG, DANGER));
         }
         row.setOnClickListener(v -> {
-            todo.done = true;
-            store.updateTodo(todo);
-            render();
+            if (!todo.done && todo.dueAt == 0) {
+                showTimePicker(todo);
+            } else {
+                todo.done = true;
+                store.updateTodo(todo);
+                render();
+            }
         });
         parent.addView(row);
+    }
+
+    /** 无时间待办的快捷时间补充 */
+    private void showTimePicker(Model.Todo todo) {
+        String[] options = {"今天", "明天", "三天内", "下周", "不需要时间"};
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("「" + todo.task + "」什么时候做？")
+                .setItems(options, (dialog, which) -> {
+                    Calendar cal = Calendar.getInstance();
+                    switch (which) {
+                        case 0: cal.set(Calendar.HOUR_OF_DAY, 18); cal.set(Calendar.MINUTE, 0); break;
+                        case 1: cal.add(Calendar.DAY_OF_YEAR, 1); cal.set(Calendar.HOUR_OF_DAY, 10); cal.set(Calendar.MINUTE, 0); break;
+                        case 2: cal.add(Calendar.DAY_OF_YEAR, 3); cal.set(Calendar.HOUR_OF_DAY, 10); cal.set(Calendar.MINUTE, 0); break;
+                        case 3: cal.add(Calendar.DAY_OF_YEAR, 7); cal.set(Calendar.HOUR_OF_DAY, 10); cal.set(Calendar.MINUTE, 0); break;
+                        case 4: todo.timeText = "无固定时间"; store.updateTodo(todo); render(); return;
+                    }
+                    todo.dueAt = cal.getTimeInMillis();
+                    todo.timeText = options[which];
+                    store.updateTodo(todo);
+                    ReminderAlarm.schedule(this, todo);
+                    Toast.makeText(this, "已设提醒：" + options[which], Toast.LENGTH_SHORT).show();
+                    render();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     /* --------------------------------- 设置页 --------------------------------- */
