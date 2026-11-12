@@ -173,11 +173,13 @@ public final class Pipeline {
                         }
                         // 活动摘要用全文生成
                         try {
-                            long segStart = session.startedAt;
-                            long segEnd = session.startedAt;
+                            long segStart = Long.MAX_VALUE;
+                            long segEnd = 0;
                             for (Model.Segment seg : session.segments) {
-                                segStart = Math.min(segStart, seg.startedAt);
-                                segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                                if (seg.state != null && seg.state.equals("done")) {
+                                    segStart = Math.min(segStart, seg.startedAt);
+                                    segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                                }
                             }
                             generateActivitySummary(context, store, session.id, briefing, totalTodos, segStart, segEnd);
                         } catch (Throwable summaryError) {
@@ -210,11 +212,13 @@ public final class Pipeline {
                         
                         // 活动摘要用所有块的 summary 合并生成
                         try {
-                            long segStart = session.startedAt;
-                            long segEnd = session.startedAt;
+                            long segStart = Long.MAX_VALUE;
+                            long segEnd = 0;
                             for (Model.Segment seg : session.segments) {
-                                segStart = Math.min(segStart, seg.startedAt);
-                                segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                                if (seg.state != null && seg.state.equals("done")) {
+                                    segStart = Math.min(segStart, seg.startedAt);
+                                    segEnd = Math.max(segEnd, seg.startedAt + seg.durationMs);
+                                }
                             }
                             String summaryInput = allSummaries.length() > 0
                                     ? "多个话题的概要：" + allSummaries
@@ -524,6 +528,25 @@ public final class Pipeline {
             block.memoryCount = store.memories().size();
             block.sessionId = sessionId;
             block.createdAt = System.currentTimeMillis();
+            
+            // 日历日期（跨天的段拆到各自的日期）
+            java.text.SimpleDateFormat dayFmt = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.CHINA);
+            block.dateKey = dayFmt.format(new java.util.Date(block.startTime));
+            
+            // 跨天处理：如果 startTime 和 endTime 不在同一天，拆分
+            String startDay = dayFmt.format(new java.util.Date(block.startTime));
+            String endDay = dayFmt.format(new java.util.Date(block.endTime));
+            if (!startDay.equals(endDay)) {
+                // 跨天：截断 endTime 到当天 23:59:59，剩余部分创建新的活动块
+                java.util.Calendar endCal = java.util.Calendar.getInstance();
+                endCal.setTime(new java.util.Date(block.startTime));
+                endCal.set(java.util.Calendar.HOUR_OF_DAY, 23);
+                endCal.set(java.util.Calendar.MINUTE, 59);
+                endCal.set(java.util.Calendar.SECOND, 59);
+                block.endTime = endCal.getTimeInMillis();
+                block.dateKey = startDay;
+            }
+            
             store.addActivity(block);
             Log.i(TAG, "活动摘要：" + block.summary);
         } catch (Throwable error) {

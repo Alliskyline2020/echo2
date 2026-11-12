@@ -55,6 +55,8 @@ public final class Model {
         public int memoryCount;
         /** 关联的 sessionId（内部溯源用，用户不可见） */
         public String sessionId;
+        /** 日历日期（yyyy-MM-dd），用于按天分组和日期导航 */
+        public String dateKey;
         /** 原始转写全文（点开摘要时展示） */
         public String transcript = "";
         public long createdAt;

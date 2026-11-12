@@ -371,4 +371,22 @@ public synchronized void addMemory(Model.MemoryItem item) {
         write("todos.json", todos);
         write("memories.json", memories);
     }
+    /** 30 天前的活动只保留标题和计数，删除描述和转写（长期管理） */
+    private void archiveOldActivities() {
+        if (activities == null || activities.isEmpty()) return;
+        long cutoff = System.currentTimeMillis() - 30L * 86_400_000L;
+        boolean changed = false;
+        for (Model.ActivityBlock a : activities) {
+            if (a.createdAt < cutoff && a.summary != null && a.summary.length() > 80) {
+                a.summary = a.summary.substring(0, 80) + "…";
+                a.transcript = "";
+                changed = true;
+            }
+        }
+        if (changed) {
+            write("activities.json", activities);
+            Log.i("echo-store", "归档了过期活动");
+        }
+    }
+
 }
